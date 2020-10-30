@@ -14,7 +14,7 @@ set(SOURCE_FILES
   ../thirdparty/imgui/backends/imgui_impl_opengl3.cpp  
 )
 
-set_source_files_properties(teapot.cxx PROPERTIES COMPILE_FLAGS "-shader -g")
+set_source_files_properties(teapot.cxx PROPERTIES COMPILE_FLAGS "-shader")
 
 add_executable(teapot ${SOURCE_FILES})
 

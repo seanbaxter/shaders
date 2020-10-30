@@ -112,14 +112,14 @@ struct shadertoy_uniforms_t {
 [[using spirv: uniform, binding(0)]]
 shadertoy_uniforms_t uniforms;
 
-template<typename shader_t>
-[[using spirv: uniform, binding(1)]]
+template<typename shader_t, int I>
+[[using spirv: uniform, binding(1 + I)]]
 shader_t shader_ubo;
 
-template<typename shader_t>
+template<typename shader_t, int I>
 [[spirv::frag(lower_left)]]
 void frag_main() {
-  fragColor = shader_ubo<shader_t>.render(glfrag_FragCoord.xy, uniforms);
+  fragColor = shader_ubo<shader_t, I>.render(glfrag_FragCoord.xy, uniforms);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -679,7 +679,7 @@ struct program_base_t {
   GLuint ubo;
 };
 
-template<typename shader_t>
+template<typename shader_t, int I>
 struct program_t : program_base_t {
   // Keep an instance of the shader parameters in memory to drive ImGui.
   shader_t shader;
@@ -689,8 +689,8 @@ struct program_t : program_base_t {
   vec4 eval(vec2 coord, shadertoy_uniforms_t u, bool signal) override;
 };
 
-template<typename shader_t>
-program_t<shader_t>::program_t() {
+template<typename shader_t, int I>
+program_t<shader_t, I>::program_t() {
   // Create vertex and fragment shader handles.
   GLuint vs = glCreateShader(GL_VERTEX_SHADER);
   GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
@@ -700,7 +700,7 @@ program_t<shader_t>::program_t() {
   glShaderBinary(2, shaders, GL_SHADER_BINARY_FORMAT_SPIR_V_ARB, 
     __spirv_data, __spirv_size);
   glSpecializeShader(vs, @spirv(vert_main), 0, nullptr, nullptr);
-  glSpecializeShader(fs, @spirv(frag_main<shader_t>), 0, nullptr, nullptr);
+  glSpecializeShader(fs, @spirv(frag_main<shader_t, I>), 0, nullptr, nullptr);
 
   // Link the shaders into a program.
   program = glCreateProgram();
@@ -714,8 +714,8 @@ program_t<shader_t>::program_t() {
     GL_DYNAMIC_STORAGE_BIT);
 }
 
-template<typename shader_t>
-bool program_t<shader_t>::configure(bool update_ubo) {
+template<typename shader_t, int I>
+bool program_t<shader_t, I>::configure(bool update_ubo) {
   bool changed = render_imgui(shader, "child");
 
   if(update_ubo)
@@ -724,8 +724,8 @@ bool program_t<shader_t>::configure(bool update_ubo) {
   return changed;
 }
 
-template<typename shader_t>
-vec4 program_t<shader_t>::eval(vec2 coord, shadertoy_uniforms_t u, 
+template<typename shader_t, int I>
+vec4 program_t<shader_t, I>::eval(vec2 coord, shadertoy_uniforms_t u, 
   bool signal) {
   assert(0 < coord.x && coord.x < u.resolution.x);
   assert(0 < coord.y && coord.y < u.resolution.y);
@@ -1113,7 +1113,7 @@ void app_t::loop() {
 
       // Bind and execute the input program.
       glUseProgram(program->program);
-      glBindBufferBase(GL_UNIFORM_BUFFER, 1, program->ubo);
+      glBindBufferBase(GL_UNIFORM_BUFFER, 1 + (int)active_shader, program->ubo);
 
       glBindVertexArray(vao);
 
@@ -1187,7 +1187,7 @@ void app_t::set_active_shader(shader_program_t shader) {
   switch(shader) {
     @meta for enum(shader_program_t e : shader_program_t) {
       case e: 
-        program = std::make_unique<program_t<@enum_type(e)> >();
+        program = std::make_unique<program_t<@enum_type(e), (int)e> >();
         break;
     }
   }

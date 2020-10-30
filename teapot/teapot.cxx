@@ -63,7 +63,7 @@ struct tess_edge_t {
   }
 };
 
-template<typename tess_t>
+template<typename tess_t, int I>
 [[spirv::tesc(16)]]
 void tesc_shader() {
   vec3 v00 = gltesc_Input[0].Position.xyz;
@@ -73,10 +73,10 @@ void tesc_shader() {
 
   // Make a counter-clockwise pass from OL0 through OL3. See Figure 11.1 
   // in OpenGL 4.6 specification.
-  gltesc_LevelOuter[0] = shader_ubo<0, tess_t>.get_level(v01, v00);
-  gltesc_LevelOuter[1] = shader_ubo<0, tess_t>.get_level(v00, v10);
-  gltesc_LevelOuter[2] = shader_ubo<0, tess_t>.get_level(v10, v11);
-  gltesc_LevelOuter[3] = shader_ubo<0, tess_t>.get_level(v11, v01);
+  gltesc_LevelOuter[0] = shader_ubo<I, tess_t>.get_level(v01, v00);
+  gltesc_LevelOuter[1] = shader_ubo<I, tess_t>.get_level(v00, v10);
+  gltesc_LevelOuter[2] = shader_ubo<I, tess_t>.get_level(v10, v11);
+  gltesc_LevelOuter[3] = shader_ubo<I, tess_t>.get_level(v11, v01);
 
   // Average the opposing outer edges for inner edge levels.
   gltesc_LevelInner[0] = .5f * (gltesc_LevelOuter[1] + gltesc_LevelOuter[3]);
@@ -181,11 +181,11 @@ myapp_t::myapp_t() : app_t("Tessellation sample") {
     __spirv_data, __spirv_size);
 
   glSpecializeShader(vs, @spirv(vert_shader), 0, nullptr, nullptr);
-  glSpecializeShader(ts0, @spirv(tesc_shader<tess_constant_t>), 0, 
+  glSpecializeShader(ts0, @spirv(tesc_shader<tess_constant_t, 0>), 0, 
     nullptr, nullptr);
-  glSpecializeShader(ts1, @spirv(tesc_shader<tess_distance_t>), 0, 
+  glSpecializeShader(ts1, @spirv(tesc_shader<tess_distance_t, 1>), 0, 
     nullptr, nullptr);
-  glSpecializeShader(ts2, @spirv(tesc_shader<tess_edge_t>), 0, 
+  glSpecializeShader(ts2, @spirv(tesc_shader<tess_edge_t, 2>), 0, 
      nullptr, nullptr);
   glSpecializeShader(es, @spirv(tese_shader), 0, nullptr, nullptr);
   glSpecializeShader(fs, @spirv(frag_shader), 0, nullptr, nullptr);
@@ -261,7 +261,7 @@ void myapp_t::display() {
   glUniformMatrix4fv(0, 1, false, &clip[0][0]);
 
   // Bind the tessellation-specific UBO.
-  glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo);
+  glBindBufferBase(GL_UNIFORM_BUFFER, current, ubo);
 
   // Draw the wireframe.
   glDepthFunc(GL_LEQUAL);

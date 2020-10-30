@@ -60,7 +60,7 @@ void integrate_shader() {
   int gid = glcomp_GlobalInvocationID.x;
 
   // Query the length of the mapped position buffer for particle count.
-  int num_particles = uniforms.num_particles; //buffer_vel.length;
+  int num_particles = uniforms.num_particles;
   int num_tiles = glcomp_NumWorkGroups.x;
 
   // Load the position for this thread.
