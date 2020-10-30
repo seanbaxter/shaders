@@ -112,14 +112,14 @@ struct shadertoy_uniforms_t {
 [[using spirv: uniform, binding(0)]]
 shadertoy_uniforms_t uniforms;
 
-template<typename shader_t, int I>
-[[using spirv: uniform, binding(1 + I)]]
+template<typename shader_t>
+[[using spirv: uniform, binding(1)]]
 shader_t shader_ubo;
 
-template<typename shader_t, int I = 0>
+template<typename shader_t>
 [[spirv::frag(lower_left)]]
 void frag_main() {
-  fragColor = shader_ubo<shader_t, I>.render(glfrag_FragCoord.xy, uniforms);
+  fragColor = shader_ubo<shader_t>.render(glfrag_FragCoord.xy, uniforms);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
