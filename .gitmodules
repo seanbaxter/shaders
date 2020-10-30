@@ -1,0 +1,13 @@
+[submodule "thirdparty/cgltf"]
+	path = thirdparty/cgltf
+	url = git@github.com:jkuhlmann/cgltf
+[submodule "thirdparty/imgui"]
+	path = thirdparty/imgui
+	url = git@github.com:ocornut/imgui
+[submodule "thirdparty/stb"]
+	path = thirdparty/stb
+	url = git@github.com:nothings/stb
+[submodule "RayTracingInVulkan"]
+	path = RayTracingInVulkan
+	url = git@github.com:seanbaxter/RayTracingInVulkan
+	branch = circle
