@@ -18,7 +18,6 @@ struct uniforms_t {
   float point_size = 3.f;
   float cluster_scale = 1.4;
   float velocity_scale = 11;
-  int num_particles;
 };
 
 // The uniform buffer is bound for integration and rendering.
@@ -60,7 +59,7 @@ void integrate_shader() {
   int gid = glcomp_GlobalInvocationID.x;
 
   // Query the length of the mapped position buffer for particle count.
-  int num_particles = uniforms.num_particles; //buffer_vel.length;
+  int num_particles = buffer_vel.length;
   int num_tiles = glcomp_NumWorkGroups.x;
 
   // Load the position for this thread.
@@ -435,7 +434,6 @@ void myapp_t::update_uniforms() {
   uniforms.proj = camera.get_perspective(width, height);
   uniforms.view = camera.get_view();
   uniforms.eye = camera.get_eye();
-  uniforms.num_particles = system->num_particles;
 
   glNamedBufferSubData(ubo, 0, sizeof(uniforms_t), &uniforms);
 }
