@@ -2344,7 +2344,7 @@ Constructing a matrix on a vector yields a matrix with that vector its diagonal,
 
 To support a GLSL-like environment, the Circle compiler injects itself with thousands of declarations. Some of these are for self-contained functions. Some of them are type, object and function declarations which are backed by the compiler frontend. Until a reference guide is ready, this implicit declaration file is the best way to learn which facilities are available for shader programming.
 
-(**Implicit SPIR-V declarations file [implicit/spirv.cxx]**)[implicit/spirv.cxx]
+**Implicit SPIR-V declarations file [implicit/spirv.cxx][implicit/spirv.cxx]**
 
 As more GLSL extensions are implemented, this file will grow to accommodate them.
 
