@@ -87,7 +87,7 @@ Working on this compiler has exposed _a lot_ of graphics driver bugs. The vendor
 
 * **INTEL**: Use a recent release driver. The driver fails when binding different resources to the same object within a SPIR-V module, and this breaks the teacup and shadertoy samples. Also `OpRuntimeArray` is not implemented for OpenGL which breaks nbody. Check out the [intel](https://github.com/seanbaxter/shaders/tree/intel) branch in this repository for Intel-compatible source for all the samples.
 
-* **AMD**: I don't have access to an AMD GPU. I'll be consulting with AMD engineers to resolve bugs they may have.
+* **AMD**: I don't have an AMD GPU. I'll be consulting with AMD engineers to resolve bugs.
 
 ### Compiling the samples
 
@@ -1704,6 +1704,61 @@ $ cgdb shadertoy
 Now which you check "Debug on click (run from GDB)", the generated breakpoint deposits you right at the `render` function, which is called on the host and with the screen coordinates of the mouse click.
 
 ### if-codegen statements
+
+Circle uses a single AST to represent all its C++ entity declarations. There's no annotation for discriminating code that's intended to run in a shader versus code that is meant for host execution. Including a `printf`, file operation or dynamic memory allocation in your function would pass the parser and break when lowering for SPIR-V. Sampling a texture or using a shader interface variable would pass the parser and break when lowering to LLVM.
+
+We need a way to be able to select code that gets emitted for shader targets vs CPU targets, within a function definition. The _if-codegen_ mechanism does this. Provide a boolean expression, and the body of the _if-codegen_ will get included when lowering to either IR if the predicate is true, or else it'll be skipped over, preventing ODR-usage errors.
+
+The builtin variable `__is_spirv_target` has unknown value when the parser is run, but has a set value when code generation is run. This makes it a _codegen variable_. Use it inside your _if-codegen_ predicate to direct blocks of code to CPU or shader targets.
+
+[![shader_flip](images/shader_flip_small.png)](images/shader_flip.png)
+[![cpu_flip](images/cpu_flip_small.png)](images/cpu_flip.png)
+
+```cpp
+  vec4 render(vec2 frag_coord, shadertoy_uniforms_t u) {
+    constexpr float PI2 = 2 * M_PIf32;
+    vec2 uv = frag_coord / u.resolution - .5f;
+    vec2 N = uv;
+    uv.x *= u.resolution.x / u.resolution.y;
+    uv.y -= .1f;
+    uv *= Zoom;
+
+    float t = Speed * u.time;
+
+    vec2 uvbig = uv;
+
+    // Big egg.
+    vec2 sd = egg(1.0e6, uv, t, BigSize, under(uvbig, t));
+
+    // Small eggs.
+    vec2 sdsmall = smallEggField(1.0e6, uv, uvbig, t);
+    uv -= Span * .5f;
+    sdsmall = smallEggField(sdsmall, uv, uvbig, t);
+
+    vec3 o = mix(color(sd, 2), color(sdsmall, .2f), vec3(step(.1f, sd.x)));
+
+    o = pow(o, .5f);
+    o += (hash32(frag_coord + t) - .5f) * FilmGrain;
+    o = clamp(o, 0.f, 1.f);
+    o *= 1 - length(13 * pow(abs(N), DarkEdge));
+
+    if codegen(__is_spirv_target) {
+      // Swap the right-half red and blue channels if this is a 
+      // SPIR-V target.
+      if(N.x > 0)
+        o.rb = o.br;
+
+    } else {
+      // Swap the top-half red and green channels if this is a CPU target.
+      if(N.y > 0)
+        o.rg = o.gr;
+    }
+
+    return vec4(o, 1);
+  }
+```
+
+The _if-codegen_ statement is illustrated by inserting some color component swaps in the egg shader. This is very similar to the _if-constexpr_ mechanism, in that it prunes branches at compile time to protect targets from ODR exposure to code they can't compile. However, the predicate is resolved after parsing or template instantiation and at codegen time. You can use this section to include logging code and debugging code, or choose special features that are only available for shaders.
 
 ## Compiled sprites with compile-time PNG decoding
 
