@@ -1,6 +1,6 @@
 #include <imgui.h>
-#include <examples/imgui_impl_glfw.h>
-#include <examples/imgui_impl_opengl3.h>
+#include <backends/imgui_impl_glfw.h>
+#include <backends/imgui_impl_opengl3.h>
 
 #define GL_GLEXT_PROTOTYPES
 #include <gl3w/GL/gl3w.h>
