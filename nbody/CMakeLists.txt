@@ -10,8 +10,8 @@ set(SOURCE_FILES
   ../thirdparty/imgui/imgui.cpp
   ../thirdparty/imgui/imgui_draw.cpp
   ../thirdparty/imgui/imgui_widgets.cpp
-  ../thirdparty/imgui/examples/imgui_impl_glfw.cpp
-  ../thirdparty/imgui/examples/imgui_impl_opengl3.cpp  
+  ../thirdparty/imgui/backends/imgui_impl_glfw.cpp
+  ../thirdparty/imgui/backends/imgui_impl_opengl3.cpp  
 )
 
 set_source_files_properties(nbody.cxx PROPERTIES COMPILE_FLAGS -shader)
