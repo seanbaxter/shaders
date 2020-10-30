@@ -1,0 +1,20 @@
+191 220 191
+one_shot        0  42  12  56
+two_shot       12  42  24  56
+three_shot     24  42  36  56
+four_shot      36  42  48  56
+five_shot      48  42  60  56
+energy         60  42  72  56
+reg_fireball   72  42  84  56
+blue_fireball  84  42  96  56
+arched_energy  96  42 108  56
+one_thin      108  42 120  56
+missile       120  42 132  56
+two_missile   132  42 144  56
+two_thin      144  42 156  56
+eagle         156  42 168  56
+nuke          168  42 180  56
+double_energy 180  42 192  56
+blue_haduken  192  42 204  56
+red_haduken   204  42 216  56
+missile2      216  42 228  56
