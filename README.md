@@ -87,7 +87,7 @@ Working on this compiler has exposed _a lot_ of graphics driver bugs. The vendor
 
 * **INTEL**: Use a recent release driver. The driver fails when binding different resources to the same object within a SPIR-V module, and this breaks the teacup and shadertoy samples. Also `OpRuntimeArray` is not implemented for OpenGL which breaks nbody. Check out the [intel](https://github.com/seanbaxter/shaders/tree/intel) branch in this repository for Intel-compatible source for all the samples.
 
-* **AMD**: I don't have an AMD GPU. I'll be consulting with AMD engineers to resolve bugs.
+* **AMD**: AMD on Linux is built on the same Mesa driver that Intel uses. Use the intel branch until the Mesa bugs are fixed.
 
 ### Compiling the samples
 
