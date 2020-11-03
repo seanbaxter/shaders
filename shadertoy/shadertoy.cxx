@@ -139,7 +139,6 @@ inline vec2 rot(vec2 p, float a) {
   return rot(p, vec2(), a);
 }
 
-
 struct [[
   .imgui::title="Devil Egg",
   .imgui::url="https://www.shadertoy.com/view/3tXXRX"
@@ -655,12 +654,162 @@ struct [[
   [[.imgui::color3]] vec3 inactive_color = vec3(0, 0, 1);
 };
 
+struct [[
+  .imgui::title="Menger Journey",
+  .imgui::url="https://www.shadertoy.com/view/Mdf3z7"
+]] menger_journey_t {
+
+  vec2 rotate(vec2 v, float a) {
+    return vec2(cos(a) * v.x + sin(a) * v.y, -sin(a) * v.x + cos(a) * v.y);
+  }
+
+  // Two light sources. No specular 
+  vec3 getLight(vec3 color, vec3 normal, vec3 dir) {
+    vec3 light_dir = normalize(vec3(1, 1, 1));
+    vec3 light_dir2 = normalize(vec3(1, -1, 1));
+
+    float diffuse = max(0.f, dot(-normal, light_dir));
+    float diffuse2 = max(0.f, dot(-normal, light_dir2));
+
+    return Diffuse * color * (diffuse * LightColor + diffuse2 * LightColor2);
+  }
+
+  // For more info on KIFS, see:
+  // http://www.fractalforums.com/3d-fractal-generation/kaleidoscopic-%28escape-time-ifs%29/
+  float DE(vec3 z, float angle) {
+    // Folding 'tiling' of 3D space;
+    z = abs(1 - mod(z, 2.f));
+
+    const vec3 Offset(0.92858,0.92858,0.32858);
+
+    float d = 1000.0;
+    for (int n = 0; n < NumIterations; n++) {
+      z.xy = rotate(z.xy, angle);
+      z = abs(z);
+      if(z.x < z.y) z.xy = z.yx;
+      if(z.x < z.z) z.xz = z.zx;
+      if(z.y < z.z) z.yz = z.zy;
+
+      z = Scale * z - Offset * (Scale - 1);
+      if(z.z < -0.5f * Offset.z * (Scale - 1))
+        z.z += Offset.z * (Scale - 1);
+
+      d = min(d, length(z) * pow(Scale, -n - 1));
+    }
+    
+    return d - 0.001f;
+  }
+
+  // Finite difference normal
+  vec3 getNormal(vec3 pos, float angle) {
+    vec2 e(0, NormalDistance);
+
+    return normalize(vec3(
+      DE(pos + e.yxx, angle) - DE(pos - e.yxx, angle),
+      DE(pos + e.xyx, angle) - DE(pos - e.xyx, angle),
+      DE(pos + e.xxy, angle) - DE(pos - e.xxy, angle)
+    ));
+  }
+
+  // Solid color 
+  vec3 getColor(vec3 normal, vec3 pos) {
+    return vec3(1.0);
+  }
+
+  // Pseudo-random number
+  // From: lumina.sourceforge.net/Tutorials/Noise.html
+  float rand(vec2 co) {
+    return fract(cos(dot(co, vec2(4.898, 7.23))) * 23421.631f);
+  }
+
+  vec3 rayMarch(vec3 from, vec3 dir, vec2 fragCoord, float time) {
+    // Add some noise to prevent banding
+    float totalDistance = Jitter * rand(fragCoord + time);
+    float angle = 4 + 2 * cos(time / 8);
+
+    vec3 dir2 = dir;
+    float distance;
+    int steps = 0;
+    vec3 pos;
+    for (int i = 0; i < MaxSteps; i++) {
+      // Non-linear perspective applied here.
+      dir.zy = rotate(
+        dir2.zy,
+        totalDistance * cos(time / 4) * NonLinearPerspective
+      );
+      
+      pos = from + totalDistance * dir;
+      distance = DE(pos, angle) * FudgeFactor;
+      totalDistance += distance;
+      if (distance < MinimumDistance) 
+        break;
+
+      steps = i;
+    }
+    
+    // 'AO' is based on number of steps.
+    // Try to smooth the count, to combat banding.
+    float smoothStep = steps + distance / MinimumDistance;
+    float ao = 1.1f - smoothStep / float(MaxSteps);
+    
+    // Since our distance field is not signed,
+    // backstep when calc'ing normal
+    vec3 normal = getNormal(pos - 3 * dir * NormalDistance, angle);
+    
+    vec3 color = getColor(normal, pos);
+    vec3 light = getLight(color, normal, dir);
+    return (color * Ambient + light) * ao;
+  }
+
+  vec4 render(vec2 frag_coord, shadertoy_uniforms_t u) {
+    // Camera position (eye), and camera target
+    float time = Speed * u.time;
+
+    vec3 camPos = 0.5f * time * vec3(1, 0, 0);
+    vec3 target = camPos + vec3(1, 0, 0);
+    vec3 camUp(0, 1, 0);
+    
+    // Calculate orthonormal camera reference system
+    vec3 camDir = normalize(target - camPos); // direction for center ray
+    camUp = normalize(camUp - dot(camDir, camUp) * camDir); // orthogonalize
+    vec3 camRight = normalize(cross(camDir, camUp));
+    
+    vec2 coord = -1 + 2 * frag_coord / u.resolution.xy;
+    coord.x *= u.resolution.x / u.resolution.y;
+    
+    // Get direction for this pixel
+    vec3 rayDir = normalize(camDir + (coord.x*camRight + coord.y*camUp)* FOV);
+    
+    vec3 color = rayMarch(camPos, rayDir, frag_coord, time);
+    return vec4(color, 1);
+  }
+
+  [[.imgui::range_int { 1, 100 }]] int MaxSteps = 30;
+  [[.imgui::range_int { 1, 20 }]]  int NumIterations = 7;
+
+  float MinimumDistance = .0009;
+  float NormalDistance = .0002;
+
+  [[.imgui::range_float { 0, 2 }]]  float Speed = 1;
+  [[.imgui::range_float { 1, 10 }]] float Scale = 3;
+  float FOV = 1;
+  float Jitter = .05;
+  float FudgeFactor = .7;
+  float NonLinearPerspective = 2;
+  float Ambient = .32184;
+  float Diffuse = .5;
+
+  [[.imgui::color3]] vec3 LightColor = vec3(1, 1, .858);
+  [[.imgui::color3]] vec3 LightColor2 = vec3(0, .3333, 1);
+};
+
 enum typename class shader_program_t {
   DevilEgg = devil_egg_t,
   HypnoBands = hypno_bands_t,
   Modulation = modulation_t,
   Square = keep_up_square_t,
   Paint = paint_t,
+  MengerJourney = menger_journey_t,
   MouseTest = mouse_test_t,
 };
 
