@@ -1105,8 +1105,104 @@ struct [[
   [[.imgui::color3]] vec3 ShadeColor3 = vec3(220, 94, 75) / 255;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
+struct palette_t {
+  
+  vec3 fcos(vec3 x) const {
+    vec3 w = x;
+
+    // Take the derivative of this term. Only available in SPIR-V builds.
+    if codegen(__is_spirv_target)
+      w = glfrag_fwidth(x);
+
+    x = Approximate ?
+      cos(x) * smoothstep(PI2, 0.f, w) :
+      cos(x) * sin(.5f * w) / (.5f * w);
+    return x;
+  }
+
+  vec3 mcos(vec3 x, bool mode) const {
+    return mode ? cos(x) : fcos(x);
+  }
+
+  vec3 get_color(float t, bool mode) const {
+    vec3 col = color0;
+    col += 0.14f * mcos(PI2 *   1.0f * t + color1, mode);
+    col += 0.13f * mcos(PI2 *   3.1f * t + color2, mode);
+    col += 0.12f * mcos(PI2 *   5.1f * t + color3, mode);
+    col += 0.11f * mcos(PI2 *   9.1f * t + color4, mode);
+    col += 0.10f * mcos(PI2 *  17.1f * t + color5, mode);
+    col += 0.09f * mcos(PI2 *  31.1f * t + color6, mode);
+    col += 0.08f * mcos(PI2 *  65.1f * t + color7, mode);
+    col += 0.07f * mcos(PI2 * 131.1f * t + color8, mode);
+    return col;
+  }
+
+  static constexpr float PI2 = 2 * M_PIf32;
+
+  bool Approximate = true;
+  [[.imgui::color3]] vec3 color0 = vec3(0.5, 0.5, 0.4);
+  [[.imgui::color3]] vec3 color1 = vec3(0.0, 0.5, 0.6);
+  [[.imgui::color3]] vec3 color2 = vec3(0.5, 0.6, 1.0);
+  [[.imgui::color3]] vec3 color3 = vec3(0.1, 0.7, 1.1);
+  [[.imgui::color3]] vec3 color4 = vec3(0.1, 0.5, 1.2);
+  [[.imgui::color3]] vec3 color5 = vec3(0.0, 0.3, 0.9);
+  [[.imgui::color3]] vec3 color6 = vec3(0.1, 0.5, 1.3);
+  [[.imgui::color3]] vec3 color7 = vec3(0.1, 0.5, 1.3);
+  [[.imgui::color3]] vec3 color8 = vec3(0.3, 0.2, 0.8);
+};
+
+struct [[
+  .imgui::title="Band limited synthesis 1",
+  .imgui::url="https://www.shadertoy.com/view/WtScDt"
+]] band_limited1_t {
+
+  vec4 render(vec2 frag_coord, shadertoy_uniforms_t u) const {
+    
+    vec2 q = (2 * frag_coord - u.resolution) / u.resolution.y;
+    float time = Speed * u.time;
+
+    // Separation.
+    float th = (u.mouse.z > .001f) ? 
+      (2 * u.mouse.x - u.resolution.x) / u.resolution.y :
+      1.8f * sin(time);
+    bool mode = q.x < th;
+
+    // Deformation.
+    vec2 p = 2 * q / dot(q, q);
+
+    // Animation
+    p += .05f * time;
+
+    // Texture
+    vec3 col = min(
+      palette.get_color(p.x, mode), 
+      palette.get_color(p.y, mode)
+    );
+
+    // Vignetting.
+    col *= 1.5f - .02f * length(q);
+
+    // Separation.
+    col *= smoothstep(.005f, .010f, abs(q.x - th));
+  
+    // Palette
+    if(q.y < -.9f) 
+      col = palette.get_color(frag_coord.x / u.resolution.x, mode);
+
+    return vec4(col, 1);
+  }
+
+  [[.imgui::range_float { 0, 3 }]] float Speed = 1.8f;
+  palette_t palette;
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+
 enum typename class shader_program_t {
-  DevilEgg = devil_egg_t,
+/*  DevilEgg = devil_egg_t,
   HypnoBands = hypno_bands_t,
   Modulation = modulation_t,
   Square = keep_up_square_t,
@@ -1132,6 +1228,9 @@ enum typename class shader_program_t {
     blobs_t
   >,
 #endif
+*/
+
+  band_limited1_t
 };
 
 
