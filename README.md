@@ -52,8 +52,11 @@
 
     [![egg](images/egg_small.png)](#reflection-and-attributes-for-shadertoy-development)
     [![bands](images/bands_small.png)](#reflection-and-attributes-for-shadertoy-development)
+    [![menger](images/menger_small.png)](#reflection-and-attributes-for-shadertoy-development)
+    [![segment_tracer](images/segment_tracer_small.png)](#reflection-and-attributes-for-shadertoy-development)
     * [User attributes](#user-attributes)
     * [User attributes and Dear ImGui](#user-attributes-and-dear-imgui)
+    * [Shader programming with composition](#shader-programming-with-composition)
     * [Unified CPU and GPU rendering and CPU debugging](#unified-cpu-and-gpu-rendering-and-cpu-debugging)
     * [if-codegen statements](#if-codegen-statements)
 
@@ -1303,7 +1306,8 @@ A `reinterpret_cast` or C-style cast between pointers to arithmetic types with t
 [![bands](images/bands_small.png)](images/bands.png)
 [![modulation](images/modulation_small.png)](images/modulation.png)
 [![square](images/square_small.png)](images/square.png)
-[![paint](images/paint_small.png)](images/paint.png)
+[![menger](images/menger_small.png)](images/menger.png)
+[![segment_tracer](images/segment_tracer_small.png)](images/segment_tracer.png)
 
 [Shadertoy](https://www.shadertoy.com/) is an incredible creative showcase for graphics programmers. The host provides some basic uniform variables like `iResolution` and `iTime`. You provide the fragment shader. A full-window quad is drawn once per frame, and amazing imagery comes out.
 
@@ -1624,56 +1628,249 @@ A couple basic user attributes are declared in the namespace `imgui` to select t
 
 [**shadertoy/shadertoy.cxx**](shadertoy/shadertoy.cxx)
 ```cpp
+
+// Return true if any option has changed.
 template<typename options_t>
-void render_imgui(options_t& options, const char* child_name) {
-  ImGui::BeginChild(child_name);
-  if constexpr(@has_attribute(options_t, imgui::url))
-    ImGui::Text(@attribute(options_t, imgui::url));
+bool render_imgui(options_t& options, const char* child_name = nullptr) {
 
-  using namespace imgui;
-  @meta for(int i = 0; i < @member_count(options_t); ++i) {{
-    typedef @member_type(options_t, i) type_t;
-    const char* name = @member_name(options_t, i);
-    auto& value = @member_value(options, i);
+  bool changed = false;
+  if(!child_name || 
+    ImGui::TreeNodeEx(child_name, ImGuiTreeNodeFlags_DefaultOpen)) {
 
-    if constexpr(@member_has_attribute(options_t, i, color4)) {
-      ImGui::ColorEdit4(name, &value.x);
+    using namespace imgui;
+    if constexpr(@has_attribute(options_t, url))
+      ImGui::Text(@attribute(options_t, url));
 
-    } else if constexpr(@member_has_attribute(options_t, i, color3)) {
-      ImGui::ColorEdit3(name, &value.x);
+    @meta for(int i = 0; i < @member_count(options_t); ++i) {{
+      typedef @member_type(options_t, i) type_t;
+      const char* name = @member_name(options_t, i);
+      auto& value = @member_value(options, i);
 
-    } else if constexpr(@member_has_attribute(options_t, i, range_float)) {
-      auto minmax = @member_attribute(options_t, i, range_float);
-      ImGui::SliderFloat(name, &value, minmax.min, minmax.max);
+      if constexpr(@member_has_attribute(options_t, i, color4)) {
+        changed |= ImGui::ColorEdit4(name, &value.x);
 
-    } else if constexpr(@member_has_attribute(options_t, i, range_int)) {
-      auto minmax = @member_attribute(options_t, i, range_int);
-      ImGui::SliderInt(name, &value, minmax.min, minmax.max);
+      } else if constexpr(@member_has_attribute(options_t, i, color3)) {
+        changed |= ImGui::ColorEdit3(name, &value.x);
 
-    } else if constexpr(std::is_same_v<type_t, bool>) {
-      ImGui::Checkbox(name, &value);
+      } else if constexpr(@member_has_attribute(options_t, i, range_float)) {
+        auto minmax = @member_attribute(options_t, i, range_float);
+        changed |= ImGui::SliderFloat(name, &value, minmax.min, minmax.max);
 
-    } else if constexpr(std::is_same_v<type_t, vec4>) {
-      ImGui::DragFloat4(name, &value.x, .1f);
+      } else if constexpr(@member_has_attribute(options_t, i, range_int)) {
+        auto minmax = @member_attribute(options_t, i, range_int);
+        changed |= ImGui::SliderInt(name, &value, minmax.min, minmax.max);
 
-    } else if constexpr(std::is_same_v<type_t, vec3>) {
-      ImGui::DragFloat3(name, &value.x, .1f);
+      } else if constexpr(std::is_same_v<type_t, bool>) {
+        changed |= ImGui::Checkbox(name, &value);
 
-    } else if constexpr(std::is_same_v<type_t, vec2>) {
-      ImGui::DragFloat2(name, &value.x, .1f);
-      
-    } else if constexpr(std::is_same_v<type_t, float>) {
-      ImGui::DragFloat(name, &value, .1f);
-  
-    } else if constexpr(std::is_same_v<type_t, int>) {
-      ImGui::DragInt(name, &value);
-    }
-  }}
-  ImGui::EndChild();
+      } else if constexpr(std::is_same_v<type_t, vec4>) {
+        changed |= ImGui::DragFloat4(name, &value.x, .1f);
+
+      } else if constexpr(std::is_same_v<type_t, vec3>) {
+        changed |= ImGui::DragFloat3(name, &value.x, .1f);
+
+      } else if constexpr(std::is_same_v<type_t, vec2>) {
+        changed |= ImGui::DragFloat2(name, &value.x, .1f);
+        
+      } else if constexpr(std::is_same_v<type_t, float>) {
+        changed |= ImGui::DragFloat(name, &value, .1f);
+    
+      } else if constexpr(std::is_same_v<type_t, int>) {
+        changed |= ImGui::DragInt(name, &value);
+
+      } else if constexpr(std::is_class_v<type_t>) {
+        // Iterate over each data member.
+        changed |= render_imgui(value, name);
+
+      }
+    }}
+
+    if(child_name)
+      ImGui::TreePop();
+  }
+
+  return changed;
 }
 ```
 
 The `render_imgui` utility uses C++17's _if-constexpr_ statement and C++ <type_traits> to switch over attributes and types of a data member to generate the most suitable widget. But it requires the Circle-specific introspection keywords `@member_count`, `@member_name` and `@member_type` and `@member_values` to loop over each data member in the function object.
+
+The uniform buffer is a struct that may have struct members. In this case, `std::is_class_v` indicates a class (or struct) type. `render_imgui` recursively opens that struct member inside a tree node and processes all its data members. This is an important feature for allowing shader construction through object composition.
+
+### Shader programming with composition
+
+[segment_tracer](images/segment_tracer.png)
+
+**NOTE:** This sample uses features from Circle build 101. Download it [here](https://www.circle-lang.org/index.html#the-program). 
+
+Ray marching is the most popular approach to rendering procedural geometries. You can define a [signed distance field](https://iquilezles.org/www/articles/distfunctions/distfunctions.htm) for simple primitives and combine them with elementary functions like min, max, mod, sum, sine and cosine, and so on, to generate infinitely detailed worlds.
+
+The conservative approach to rendering SDFs is sphere tracing. However, exploiting the derivatives of the SDF may result in fewer ray marching iterations. The [Segment Tracing Using Local Lipschitz Bounds](https://hal.archives-ouvertes.fr/hal-02507361/) paper describes one approach to this. The authors provide a [Segment Tracing shadertoy](https://www.shadertoy.com/view/WdVyDW) that comparisons step counts in conventional sphere tracing against their approach.
+
+Programming an application that uses ray marchers and signed distance fields combines several separable ideas. The choice of ray marching metric (eg spheres vs segments) is orthogonal to the underlying SDF that defines the geometry of the scene. The application code that invokes the ray marcher on the SDF is also orthogonal to the design of both of those components. A language with good generics, like C++, supports a separation of concerns, so that the ray marcher, SDF and application can be written in discrete, self-contained packages.
+
+Virtual functions are a runtime polymorphic mechanism for abstracting implementation from interface. Templates are C++'s compile-time mechanism for doing this. This Circle sample defines the ray marching sample application as a _class template_ with two template parameters: one for the ray marching algorithm, one for the scene logic. Each implementation of a ray marcher on scene is defined as a class that encapsulates parameter data and methods. When instantiated through the template, their data is composited into the data of the client, resulting in a single OpenGL uniform buffer object with distinct subobjects for the ray marcher, the SDF and the application logic.
+
+[**shadertoy/shadertoy.cxx**](shadertoy/shadertoy.cxx)
+```cpp
+struct trace_result_t {
+  bool hit;
+  int steps;
+  float t;
+};
+
+struct sphere_tracer_t {
+  template<typename scene_t>
+  trace_result_t trace(const scene_t& scene, vec3 o, vec3 dir, float ra, 
+    float rb, int max_steps);
+
+  [[.imgui::range_float {0, .3 }]] float epsilon = .1;
+};
+
+struct segment_tracer_t {
+  template<typename scene_t>
+  trace_result_t trace(const scene_t& scene, vec3 o, vec3 dir, float ra,
+    float rb, int max_steps);
+
+  [[.imgui::range_float { 0, .3 }]] float epsilon = .1;
+  [[.imgui::range_float { 0, 5 }]] float kappa = 2.0;
+};
+```
+
+Both ray marching metrics are defined in their own classes with their own attributed data members. The ImGui reflection code will render these parameters inside collapsible trees of the application's control panel. Both classes also implement a `trace` member function. They don't necessarily need to have the same interface, but the interfaces must at least compile when called from the application logic.
+
+The important thing to note is that the object that evaluates the scene SDF and its gradient is passed in as a function parameter. The type of the function parameter (and by extension the definition of the SDF) is deduced as a template parameter. This completely separates ray marching logic from the SDF.
+
+[**shadertoy/shadertoy.cxx**](shadertoy/shadertoy.cxx)
+```cpp
+struct blobs_t {
+
+  float Object(vec3 p) const;
+  float KSegment(vec3 a, vec3 b) const;
+  float KGlobal() const;
+  vec3 ObjectNormal(vec3 p) const;
+
+  [[.imgui::range_float {1, 20 }]] float radius = 8; // Distance between blobs.
+  [[.imgui::range_float {0,  1 }]] float T = .5;     // Surface epsilon. 
+};
+```
+
+This sample implements a single scene defined as the union of three point functions. The inter-point spacing is held in the `radius` data member. The object implements the SDF evaluation function, `Object`, and its normal vector function, `ObjectNormal`. The `KSegment` and `KGlobal` provide derivative information for ray marching.
+
+
+[**shadertoy/shadertoy.cxx**](shadertoy/shadertoy.cxx)
+```cpp
+template<const char title[], typename tracer_t, typename scene_t>
+struct [[
+  .imgui::title=title,
+  .imgui::url="https://www.shadertoy.com/view/WdVyDW"
+]] tracer_engine_t {
+
+  vec4 render(vec2 frag_coord, shadertoy_uniforms_t u);
+
+  [[.imgui::range_float { 0, 1 }]] float Speed = .25f;
+  [[.imgui::range_int {1, 300 }]] int MaxSteps = 150;
+
+  tracer_t tracer;
+  scene_t scene;
+
+  [[.imgui::color3]] vec3 BackgroundColor1 = vec3(.8, .8, .9);
+  [[.imgui::color3]] vec3 BackgroundColor2 = vec3(.6, .8, 1.0);
+
+  [[.imgui::color3]] vec3 ShadeColor1 = vec3(97, 130, 234) / 255;
+  [[.imgui::color3]] vec3 ShadeColor2 = vec3(221, 220, 219) / 255;
+  [[.imgui::color3]] vec3 ShadeColor3 = vec3(220, 94, 75) / 255;
+}
+```
+
+Declare the application engine as a class template. It has parameters for the tracer and scene classes. It also parameterizes the `imgui::title` user attribute. (Circle supports string literal class template parameters to make this work.)
+
+The `tracer_t` and `scene_t` template parameters become data members of the application class. This is what I mean by "composition." A single uniform buffer object holds all the parameters for this shader program, yet the two subsystems only know about their own members.
+
+```cpp
+enum typename class shader_program_t {
+  DevilEgg = devil_egg_t,
+  HypnoBands = hypno_bands_t,
+  Modulation = modulation_t,
+  Square = keep_up_square_t,
+  Paint = paint_t,
+  MengerJourney = menger_journey_t,
+  MouseTest = mouse_test_t,
+
+  SphereTracer = tracer_engine_t<
+    "Sphere tracer (Click to display step counts)", 
+    sphere_tracer_t, 
+    blobs_t
+  >,
+  SegmentTracer = tracer_engine_t<
+    "Segment tracer (Click to display step counts)", 
+    segment_tracer_t, 
+    blobs_t
+  >,
+  DualTracer = tracer_engine_t<
+    "Tracer comparison (Left is sphere tracing, right is segment tracing", 
+    std::pair<sphere_tracer_t, segment_tracer_t>, 
+    blobs_t
+  >,
+};
+```
+
+Specialize the `tracer_engine_t` class with a title string, a ray marcher implementation and a scene implementation. We want to support two variants of the application: in one, the sphere tracer or segment tracer renders the entire window; in the other, the left half is rendered by the sphere tracer and the right half by the segment tracer, and the user can set the separation by clicking the mouse. To accommodate the latter version, form an `std::pair` over the two ray marcher implementations.
+
+```cpp
+template<const char title[], typename tracer_t, typename scene_t>
+struct tracer_engine_t {
+  vec4 render(vec2 frag_coord, shadertoy_uniforms_t u) {
+    vec2 pixel = 2 * (frag_coord / u.resolution) - 1;
+    vec2 mouse = 2 * (u.mouse.xy / u.resolution.xy) - 1;
+
+    float asp = u.resolution.x / u.resolution.y;
+    vec3 rd = normalize(vec3(asp * pixel.x, pixel.y - 1.5f, -4.f));
+    vec3 ro(0, 18, 40);
+
+    float a = Speed * u.time;
+    ro = RotateY(ro, a);
+    rd = RotateY(rd, a);
+
+    // Shade this object.
+    vec3 color = Background(rd);
+
+    trace_result_t result { };
+
+    constexpr bool is_dual = @is_class_template(tracer_t, std::pair);
+    if constexpr(is_dual)
+      result = (pixel.x < mouse.x) ?
+        tracer.first.trace(scene, ro, rd, 20, 60, MaxSteps) :
+        tracer.second.trace(scene, ro, rd, 20, 60, MaxSteps);
+    else
+      result = tracer.trace(scene, ro, rd, 20, 60, MaxSteps);
+
+    // Render the window.
+    if(pixel.y > mouse.y) {
+      if(result.hit) {
+        vec3 pos = ro + result.t * rd;
+        vec3 n = scene.ObjectNormal(pos);
+        color = Shade(pos, n);
+      }
+
+    } else
+      color = ShadeSteps(result.steps);
+
+    // Draw a horizontal line to mark the render vs the step count.
+    color *= smoothstep(1.f, 2.f, abs(pixel.y - mouse.y) / (2 / u.resolution.y));
+
+    // Draw a vertical line to mark the sphere vs segment tracer.
+    if constexpr(is_dual)
+      color *= smoothstep(1.f, 2.f, abs(pixel.x - mouse.x) / (2 / u.resolution.x));
+
+    return vec4(color, 1);
+  }
+};
+```
+
+The main `render` function implements the single-tracer and dual-tracer variants. It checks if the template parameter `tracer_t` is a specialization of `std::pair`. If it is, the _if-constexpr_ statement takes the branch where the `trace` function is called on the `.first` or `.second` subobject, depending on the location of the pixel compared to the last mouse click location. Note that the `.first` and `.second` members are _only defined_ when the template parameter is an `std::pair`. This function compiles even for the single-tracer versions because the _if-constexpr_ branch is only injected when its predicate can be determined to be true or false at compile time. The `.first` data member access won't generate a compiler error for the single-tracer variant, because that statement isn't even instantiated for those specializations.
+
+Template composition provides a powerful approach to generics. It can be combined with [Specialization constants](#specialization-constants) to give the user both a compile-time and a shader link-time mechanism for specializing big generic programs into lean, special-purpose programs.
 
 ### Unified CPU and GPU rendering and CPU debugging
 

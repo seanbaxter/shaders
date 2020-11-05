@@ -35,54 +35,63 @@ namespace imgui {
 
 // Return true if any option has changed.
 template<typename options_t>
-bool render_imgui(options_t& options, const char* child_name) {
-
-  ImGui::BeginChild(child_name);
-
-  using namespace imgui;
-  if constexpr(@has_attribute(options_t, url))
-    ImGui::Text(@attribute(options_t, url));
+bool render_imgui(options_t& options, const char* child_name = nullptr) {
 
   bool changed = false;
-  @meta for(int i = 0; i < @member_count(options_t); ++i) {{
-    typedef @member_type(options_t, i) type_t;
-    const char* name = @member_name(options_t, i);
-    auto& value = @member_value(options, i);
+  if(!child_name || 
+    ImGui::TreeNodeEx(child_name, ImGuiTreeNodeFlags_DefaultOpen)) {
 
-    if constexpr(@member_has_attribute(options_t, i, color4)) {
-      changed |= ImGui::ColorEdit4(name, &value.x);
+    using namespace imgui;
+    if constexpr(@has_attribute(options_t, url))
+      ImGui::Text(@attribute(options_t, url));
 
-    } else if constexpr(@member_has_attribute(options_t, i, color3)) {
-      changed |= ImGui::ColorEdit3(name, &value.x);
+    @meta for(int i = 0; i < @member_count(options_t); ++i) {{
+      typedef @member_type(options_t, i) type_t;
+      const char* name = @member_name(options_t, i);
+      auto& value = @member_value(options, i);
 
-    } else if constexpr(@member_has_attribute(options_t, i, range_float)) {
-      auto minmax = @member_attribute(options_t, i, range_float);
-      changed |= ImGui::SliderFloat(name, &value, minmax.min, minmax.max);
+      if constexpr(@member_has_attribute(options_t, i, color4)) {
+        changed |= ImGui::ColorEdit4(name, &value.x);
 
-    } else if constexpr(@member_has_attribute(options_t, i, range_int)) {
-      auto minmax = @member_attribute(options_t, i, range_int);
-      changed |= ImGui::SliderInt(name, &value, minmax.min, minmax.max);
+      } else if constexpr(@member_has_attribute(options_t, i, color3)) {
+        changed |= ImGui::ColorEdit3(name, &value.x);
 
-    } else if constexpr(std::is_same_v<type_t, bool>) {
-      changed |= ImGui::Checkbox(name, &value);
+      } else if constexpr(@member_has_attribute(options_t, i, range_float)) {
+        auto minmax = @member_attribute(options_t, i, range_float);
+        changed |= ImGui::SliderFloat(name, &value, minmax.min, minmax.max);
 
-    } else if constexpr(std::is_same_v<type_t, vec4>) {
-      changed |= ImGui::DragFloat4(name, &value.x, .1f);
+      } else if constexpr(@member_has_attribute(options_t, i, range_int)) {
+        auto minmax = @member_attribute(options_t, i, range_int);
+        changed |= ImGui::SliderInt(name, &value, minmax.min, minmax.max);
 
-    } else if constexpr(std::is_same_v<type_t, vec3>) {
-      changed |= ImGui::DragFloat3(name, &value.x, .1f);
+      } else if constexpr(std::is_same_v<type_t, bool>) {
+        changed |= ImGui::Checkbox(name, &value);
 
-    } else if constexpr(std::is_same_v<type_t, vec2>) {
-      changed |= ImGui::DragFloat2(name, &value.x, .1f);
-      
-    } else if constexpr(std::is_same_v<type_t, float>) {
-      changed |= ImGui::DragFloat(name, &value, .1f);
-  
-    } else if constexpr(std::is_same_v<type_t, int>) {
-      changed |= ImGui::DragInt(name, &value);
-    }
-  }}
-  ImGui::EndChild();
+      } else if constexpr(std::is_same_v<type_t, vec4>) {
+        changed |= ImGui::DragFloat4(name, &value.x, .1f);
+
+      } else if constexpr(std::is_same_v<type_t, vec3>) {
+        changed |= ImGui::DragFloat3(name, &value.x, .1f);
+
+      } else if constexpr(std::is_same_v<type_t, vec2>) {
+        changed |= ImGui::DragFloat2(name, &value.x, .1f);
+        
+      } else if constexpr(std::is_same_v<type_t, float>) {
+        changed |= ImGui::DragFloat(name, &value, .1f);
+    
+      } else if constexpr(std::is_same_v<type_t, int>) {
+        changed |= ImGui::DragInt(name, &value);
+
+      } else if constexpr(std::is_class_v<type_t>) {
+        // Iterate over each data member.
+        changed |= render_imgui(value, name);
+
+      }
+    }}
+
+    if(child_name)
+      ImGui::TreePop();
+  }
 
   return changed;
 }
@@ -787,20 +796,313 @@ struct [[
   [[.imgui::range_int { 1, 100 }]] int MaxSteps = 30;
   [[.imgui::range_int { 1, 20 }]]  int NumIterations = 7;
 
-  float MinimumDistance = .0009;
-  float NormalDistance = .0002;
+  [[.imgui::range_float { 0, .01}]] float MinimumDistance = .0009;
+  [[.imgui::range_float { 0, .01 }]] float NormalDistance = .0002;
 
   [[.imgui::range_float { 0, 2 }]]  float Speed = 1;
   [[.imgui::range_float { 1, 10 }]] float Scale = 3;
-  float FOV = 1;
-  float Jitter = .05;
-  float FudgeFactor = .7;
-  float NonLinearPerspective = 2;
-  float Ambient = .32184;
-  float Diffuse = .5;
+  [[.imgui::range_float {.01, 10 }]] float FOV = 1;
+
+  [[.imgui::range_float {-.5, .5 }]] float Jitter = .05;
+  [[.imgui::range_float { .1, 1 }]] float FudgeFactor = .7;
+
+  [[.imgui::range_float {-5, 5 }]] float NonLinearPerspective = 2;
+  [[.imgui::range_float { 0, 1 }]] float Ambient = .32184;
+  [[.imgui::range_float { 0, 1 }]] float Diffuse = .5;
 
   [[.imgui::color3]] vec3 LightColor = vec3(1, 1, .858);
   [[.imgui::color3]] vec3 LightColor2 = vec3(0, .3333, 1);
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Ray march algorithms
+
+struct trace_result_t {
+  bool hit;
+  int steps;
+  float t;
+};
+
+struct sphere_tracer_t {
+  template<typename scene_t>
+  trace_result_t trace(const scene_t& scene, vec3 o, vec3 dir, float ra, 
+    float rb, int max_steps) {
+
+    float t = ra;
+    int i = 0;
+    bool hit = false;
+    float k = scene.KGlobal();
+
+    while(i < max_steps) {
+      ++i;
+
+      vec3 p = o + t * dir;
+      float v = scene.Object(p);
+
+      if(v > 0) {
+        // Hit.
+        hit = true;
+        break;
+      }
+
+      // Move along ray.
+      t += max(epsilon, abs(v) / k);
+
+      // Break if ray has escaped.
+      if(t > rb)
+        break;
+    }
+
+    return { hit, i, t  };
+  }
+
+  [[.imgui::range_float {0, .3 }]] float epsilon = .1;
+};
+
+struct segment_tracer_t {
+  template<typename scene_t>
+  trace_result_t trace(const scene_t& scene, vec3 o, vec3 dir, float ra,
+    float rb, int max_steps) {
+
+    float t = ra;
+    bool hit = false;
+    float candidate = 1;
+
+    int i = 0;
+    while(i < max_steps) {
+      ++i;
+
+      vec3 p = o + t * dir;
+      float v = scene.Object(p);
+
+      if(v > 0) {
+        // Hit.
+        hit = true;
+        break;
+      }
+
+      // Lipschitz constant on a segment.
+      float lipschitzSeg = scene.KSegment(p, o + (t + candidate) * dir);
+
+      // Lipschitz marching distance.
+      float step = abs(v) / lipschitzSeg;
+
+      // No further than the segment length.
+      step = min(step, candidate);
+
+      // But at least, Epsilon.
+      step = max(epsilon, step);
+
+      // Move along ray.
+      t += step;
+
+      // Escape marched far away.
+      if(t > rb)
+        break;
+
+      candidate = kappa * step;
+    }
+
+    return { hit, i, t };
+  }
+
+  [[.imgui::range_float { 0, .3 }]] float epsilon = .1;
+  [[.imgui::range_float { 0, 5 }]] float kappa = 2.0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// Scene distance fields
+
+struct blobs_t {
+
+  float Falloff(float x, float R) const {
+    float xx = clamp(x / R, 0.f, 1.f);
+    float y = 1 - xx * xx;
+    return y * y * y;
+  }
+
+  float Vertex(vec3 p, vec3 c, float R, float e) const {
+    return e * Falloff(length(p - c), R);
+  }
+
+  float Object(vec3 p) const {
+    float I = 0;
+    I += Vertex(p, vec3(-radius / 2,      0, 0), radius, 1);
+    I += Vertex(p, vec3( radius / 2,      0, 0), radius, 1);
+    I += Vertex(p, vec3( radius / 3, radius, 0), radius, 1);
+    return I - T;
+  }
+
+  float FalloffK(float e, float R) const {
+    return e * 1.72f * abs(e) / R;
+  }
+
+  float FalloffK(float a, float b, float R, float e) const {
+    float x = 0;
+    if(a <= R) {
+      // There's a Circle SPIR-V codegen bug preventing this from being 
+      // written with multiple return statements. Am investigating.
+
+      if(b < R / 5) {
+        float t = 1 - b / R;
+        x = 6 * abs(e) * (sqrt(b) / R) * (t * t);
+
+      } else if(a > (R * R) / 5) {
+        float t = 1 - a / R;
+        x = 6 * abs(e) * (sqrt(a) / R) * (t * t);
+
+      } else {
+        x = FalloffK(e, R);
+      }
+    }
+
+    return x;
+  }
+
+  float VertexKSegment(vec3 c, float R, float e, vec3 a, vec3 b) const {
+    vec3 axis = normalize(b - a);
+    float l = dot(c - a, axis);
+    float kk = 0;
+
+    if(l < 0) {
+      kk = FalloffK(length(c - a), length(c - b), R, e);
+
+    } else if(length(b - a) < l) {
+      kk = FalloffK(length(c - b), length(c - a), R, e);
+
+    } else {
+      float dd = length(c - a) - l * l;
+      vec3 pc = a + axis * l;
+      kk = FalloffK(dd, max(length(c - b), length(c - a)), R, e);
+    }
+
+    float grad = max(
+      abs(dot(axis, normalize(c - a))), 
+      abs(dot(axis, normalize(c - b)))
+    );
+
+    return kk * grad;
+  }
+
+  float KSegment(vec3 a, vec3 b) const {
+    float K = 0;
+    K += VertexKSegment(vec3(-radius / 2,      0, 0), radius, 1, a, b);
+    K += VertexKSegment(vec3( radius / 2,      0, 0), radius, 1, a, b);
+    K += VertexKSegment(vec3( radius / 3, radius, 0), radius, 1, a, b);
+    return K;
+  }
+
+  float KGlobal() const {
+    return FalloffK(1, radius) * 3;
+  }
+
+  vec3 ObjectNormal(vec3 p) const {
+    vec2 e(0, .001);
+    float v = Object(p);
+    vec3 n(
+      Object(p + e.yxx) - v,
+      Object(p + e.xyx) - v,
+      Object(p + e.xxy) - v
+    );
+    return normalize(n);
+  }
+
+  [[.imgui::range_float {1, 20 }]] float radius = 8; // Distance between blobs.
+  [[.imgui::range_float {0,  1 }]] float T = .5;     // Surface epsilon. 
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+template<const char title[], typename tracer_t, typename scene_t>
+struct [[
+  .imgui::title=title,
+  .imgui::url="https://www.shadertoy.com/view/WdVyDW"
+]] tracer_engine_t {
+
+  vec3 RotateY(vec3 p, float a) {
+    float sa = sin(a);
+    float ca = cos(a);
+    return vec3(ca * p.x + sa * p.z, p.y, -sa * p.x + ca * p.z);    
+  }
+
+  vec3 Background(vec3 rd) {
+    return mix(BackgroundColor1, BackgroundColor2, rd.y + .25);
+  }
+
+  vec3 Shade(vec3 p, vec3 n) {
+    vec3 l1 = normalize(vec3(-2, -1, -1));
+    vec3 l2 = normalize(vec3(2, 0, 1));
+    float d1 = pow(.5f * (1 + dot(n, l1)), 2.f);
+    float d2 = pow(.5f * (1 + dot(n, l2)), 2.f);
+    return vec3(.6) + .2f * (d1 + d2) * Background(n);
+  }
+
+  vec3 ShadeSteps(int n) {
+    float t = (float)n / MaxSteps;
+    return t < .5f ? 
+      mix(ShadeColor1, ShadeColor2, 2 * t) :
+      mix(ShadeColor2, ShadeColor3, 2 * t - 1);
+  }
+
+  vec4 render(vec2 frag_coord, shadertoy_uniforms_t u) {
+    vec2 pixel = 2 * (frag_coord / u.resolution) - 1;
+    vec2 mouse = 2 * (u.mouse.xy / u.resolution.xy) - 1;
+
+    float asp = u.resolution.x / u.resolution.y;
+    vec3 rd = normalize(vec3(asp * pixel.x, pixel.y - 1.5f, -4.f));
+    vec3 ro(0, 18, 40);
+
+    float a = Speed * u.time;
+    ro = RotateY(ro, a);
+    rd = RotateY(rd, a);
+
+    // Shade this object.
+    vec3 color = Background(rd);
+
+    trace_result_t result { };
+
+    constexpr bool is_dual = @is_class_template(tracer_t, std::pair);
+    if constexpr(is_dual)
+      result = (pixel.x < mouse.x) ?
+        tracer.first.trace(scene, ro, rd, 20, 60, MaxSteps) :
+        tracer.second.trace(scene, ro, rd, 20, 60, MaxSteps);
+    else
+      result = tracer.trace(scene, ro, rd, 20, 60, MaxSteps);
+
+    // Render the window.
+    if(pixel.y > mouse.y) {
+      if(result.hit) {
+        vec3 pos = ro + result.t * rd;
+        vec3 n = scene.ObjectNormal(pos);
+        color = Shade(pos, n);
+      }
+
+    } else
+      color = ShadeSteps(result.steps);
+
+    // Draw a horizontal line to mark the render vs the step count.
+    color *= smoothstep(1.f, 2.f, abs(pixel.y - mouse.y) / (2 / u.resolution.y));
+
+    // Draw a vertical line to mark the sphere vs segment tracer.
+    if constexpr(is_dual)
+      color *= smoothstep(1.f, 2.f, abs(pixel.x - mouse.x) / (2 / u.resolution.x));
+
+    return vec4(color, 1);
+  }
+
+  [[.imgui::range_float { 0, 1 }]] float Speed = .25f;
+  [[.imgui::range_int {1, 300 }]] int MaxSteps = 150;
+
+  tracer_t tracer;
+  scene_t scene;
+
+  [[.imgui::color3]] vec3 BackgroundColor1 = vec3(.8, .8, .9);
+  [[.imgui::color3]] vec3 BackgroundColor2 = vec3(.6, .8, 1.0);
+
+  [[.imgui::color3]] vec3 ShadeColor1 = vec3(97, 130, 234) / 255;
+  [[.imgui::color3]] vec3 ShadeColor2 = vec3(221, 220, 219) / 255;
+  [[.imgui::color3]] vec3 ShadeColor3 = vec3(220, 94, 75) / 255;
 };
 
 enum typename class shader_program_t {
@@ -811,6 +1113,25 @@ enum typename class shader_program_t {
   Paint = paint_t,
   MengerJourney = menger_journey_t,
   MouseTest = mouse_test_t,
+
+#if __circle_build__ >= 101
+  // Requires Circle 101
+  SphereTracer = tracer_engine_t<
+    "Sphere tracer (Click to display step counts)", 
+    sphere_tracer_t, 
+    blobs_t
+  >,
+  SegmentTracer = tracer_engine_t<
+    "Segment tracer (Click to display step counts)", 
+    segment_tracer_t, 
+    blobs_t
+  >,
+  DualTracer = tracer_engine_t<
+    "Tracer comparison (Left is sphere tracing, right is segment tracing", 
+    std::pair<sphere_tracer_t, segment_tracer_t>, 
+    blobs_t
+  >,
+#endif
 };
 
 
@@ -865,8 +1186,7 @@ program_t<shader_t>::program_t() {
 
 template<typename shader_t>
 bool program_t<shader_t>::configure(bool update_ubo) {
-  bool changed = render_imgui(shader, "child");
-
+  bool changed = render_imgui(shader);
   if(update_ubo)
     glNamedBufferSubData(ubo, 0, sizeof(shader_t), &shader);
 
@@ -876,8 +1196,6 @@ bool program_t<shader_t>::configure(bool update_ubo) {
 template<typename shader_t>
 vec4 program_t<shader_t>::eval(vec2 coord, shadertoy_uniforms_t u, 
   bool signal) {
-  assert(0 < coord.x && coord.x < u.resolution.x);
-  assert(0 < coord.y && coord.y < u.resolution.y);
 
   if(signal)
     raise(SIGINT);
@@ -1051,7 +1369,7 @@ struct app_t {
   GLuint uniform_buffer = 0;
 
   // Indicate the current program being rendered.
-  shader_program_t active_shader { };
+  shader_program_t active_shader = { };
 
   shadertoy_uniforms_t uniforms;
 
@@ -1337,6 +1655,7 @@ void app_t::set_active_shader(shader_program_t shader) {
     @meta for enum(shader_program_t e : shader_program_t) {
       case e: 
         program = std::make_unique<program_t<@enum_type(e)> >();
+        glfwSetWindowTitle(window, @attribute(@enum_type(e), imgui::title));
         break;
     }
   }
