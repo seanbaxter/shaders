@@ -1699,7 +1699,7 @@ The uniform buffer is a struct that may have struct members. In this case, `std:
 
 ### Shader programming with composition
 
-[segment_tracer](images/segment_tracer.png)
+![segment_tracer](images/segment_tracer.png)
 
 **NOTE:** This sample uses features from Circle build 101. Download it [here](https://www.circle-lang.org/index.html#the-program). 
 
@@ -1756,7 +1756,6 @@ struct blobs_t {
 ```
 
 This sample implements a single scene defined as the union of three point functions. The inter-point spacing is held in the `radius` data member. The object implements the SDF evaluation function, `Object`, and its normal vector function, `ObjectNormal`. The `KSegment` and `KGlobal` provide derivative information for ray marching.
-
 
 [**shadertoy/shadertoy.cxx**](shadertoy/shadertoy.cxx)
 ```cpp
