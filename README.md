@@ -1703,13 +1703,13 @@ The uniform buffer is a struct that may have struct members. In this case, `std:
 
 **NOTE:** This sample uses features from Circle build 101. Download it [here](https://www.circle-lang.org/index.html#the-program). 
 
-Ray marching is the most popular approach to rendering procedural geometries. You can define a [signed distance field](https://iquilezles.org/www/articles/distfunctions/distfunctions.htm) for simple primitives and combine them with elementary functions like min, max, mod, sum, sine and cosine, and so on, to generate infinitely detailed worlds.
+Ray marching is the most popular approach to rendering procedural geometries. You can define a [signed distance field](https://iquilezles.org/www/articles/distfunctions/distfunctions.htm) for simple primitives and combine them with elementary functions like min, max, mod, sum, sine and cosine, and so on, to generate infinitely detailed worlds. Scalar fields, like the one shown here, work similarly.
 
 The conservative approach to rendering SDFs is sphere tracing. However, exploiting the derivatives of the SDF may result in fewer ray marching iterations. The [Segment Tracing Using Local Lipschitz Bounds](https://hal.archives-ouvertes.fr/hal-02507361/) paper describes one approach to this. The authors provide a [Segment Tracing shadertoy](https://www.shadertoy.com/view/WdVyDW) that comparisons step counts in conventional sphere tracing against their approach.
 
-Programming an application that uses ray marchers and signed distance fields combines several separable ideas. The choice of ray marching metric (eg spheres vs segments) is orthogonal to the underlying SDF that defines the geometry of the scene. The application code that invokes the ray marcher on the SDF is also orthogonal to the design of both of those components. A language with good generics, like C++, supports a separation of concerns, so that the ray marcher, SDF and application can be written in discrete, self-contained packages.
+Programming an application that uses ray marchers and signed distance fields combines several separable ideas. The choice of ray marching metric (eg spheres vs segments) is orthogonal to the underlying field function that defines the geometry of the scene. The application code that invokes the ray marcher on the field function is also orthogonal to the design of both of those components. A language with good generics, like C++, supports a separation of concerns, so that the ray marcher, field function and application can be written in discrete, self-contained packages.
 
-Virtual functions are a runtime polymorphic mechanism for abstracting implementation from interface. Templates are C++'s compile-time mechanism for doing this. This Circle sample defines the ray marching sample application as a _class template_ with two template parameters: one for the ray marching algorithm, one for the scene logic. Each implementation of a ray marcher on scene is defined as a class that encapsulates parameter data and methods. When instantiated through the template, their data is composited into the data of the client, resulting in a single OpenGL uniform buffer object with distinct subobjects for the ray marcher, the SDF and the application logic.
+Virtual functions are a runtime polymorphic mechanism for abstracting implementation from interface. Templates are C++'s compile-time mechanism for doing this. This Circle sample defines the ray marching sample application as a _class template_ with two template parameters: one for the ray marching algorithm, one for the scene logic. Each implementation of a ray marcher on scene is defined as a class that encapsulates parameter data and methods. When instantiated through the template, their data is composited into the data of the client, resulting in a single OpenGL uniform buffer object with distinct subobjects for the ray marcher, the field function and the application logic.
 
 [**shadertoy/shadertoy.cxx**](shadertoy/shadertoy.cxx)
 ```cpp
@@ -1739,7 +1739,7 @@ struct segment_tracer_t {
 
 Both ray marching metrics are defined in their own classes with their own attributed data members. The ImGui reflection code will render these parameters inside collapsible trees of the application's control panel. Both classes also implement a `trace` member function. They don't necessarily need to have the same interface, but the interfaces must at least compile when called from the application logic.
 
-The important thing to note is that the object that evaluates the scene SDF and its gradient is passed in as a function parameter. The type of the function parameter (and by extension the definition of the SDF) is deduced as a template parameter. This completely separates ray marching logic from the SDF.
+The important thing to note is that the object that evaluates the scene field function and its gradient is passed in as a function parameter. The type of the function parameter (and by extension the definition of the field function) is deduced as a template parameter. This completely separates ray marching logic from the field function.
 
 [**shadertoy/shadertoy.cxx**](shadertoy/shadertoy.cxx)
 ```cpp
@@ -1755,7 +1755,7 @@ struct blobs_t {
 };
 ```
 
-This sample implements a single scene defined as the union of three point functions. The inter-point spacing is held in the `radius` data member. The object implements the SDF evaluation function, `Object`, and its normal vector function, `ObjectNormal`. The `KSegment` and `KGlobal` provide derivative information for ray marching.
+This sample implements a single scene defined as the union of three point functions. The inter-point spacing is held in the `radius` data member. The object implements the field function evaluation function, `Object`, and its normal vector function, `ObjectNormal`. The `KSegment` and `KGlobal` provide derivative information for ray marching.
 
 [**shadertoy/shadertoy.cxx**](shadertoy/shadertoy.cxx)
 ```cpp
