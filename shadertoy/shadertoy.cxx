@@ -1261,6 +1261,159 @@ struct [[
   palette_t palette;
 };
 
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct [[
+  .imgui::title="Hypercomplex",
+  .imgui::url="https://www.shadertoy.com/view/XslSWl"
+]] hypercomplex_t {
+  // "Hypercomplex" by Alexander Alekseev aka TDM - 2014
+  // License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
+
+  float diffuse(vec3 n, vec3 l, float p) {
+    return pow(dot(n, l) * .4f + .6f, p);
+  }
+
+  float specular(vec3 n, vec3 l, vec3 e, float s) {
+    float nrm = (s + 8) / (M_PIf32 * 8);
+    return pow(max(dot(reflect(e, n), l), 0.f), s) * nrm;
+  }
+
+  float specular(vec3 n, vec3 e, float s) {
+    float nrm = (s + 8) / (M_PIf32 * 8);
+    return pow(max(1 - abs(dot(n, e)), 0.f), s) * nrm;
+  }
+
+  float julia(vec3 p, vec4 q) {
+    vec4 z(p, 0.f);
+    float z2 = dot(p, p);
+    float md2 = 1;
+
+    vec4 nz;
+    for(int i = 0; i < 11; ++i) {
+      md2 *= 4 * z2;
+      nz.x = z.x * z.x - dot(z.yzw, z.yzw);
+      nz.y = 2 * (z.x * z.y + z.w * z.z);
+      nz.z = 2 * (z.x * z.z + z.w * z.y);
+      nz.w = 2 * (z.x * z.w - z.y * z.z);
+      z = nz + q;
+      z2 = dot(z, z);
+      if(z2 > 4)
+        break;
+    }
+
+    return .25f * sqrt(z2 / md2) * log(z2);
+  }
+
+  float rsq(float x) { 
+    x = sin(x);
+    return pow(abs(x), 3.0f) * sign(x);
+  }
+
+  float map(vec3 p, float time) {
+    const float M = 0.6f;
+    time += 2 * rsq(.5f * time);
+    return julia(p, vec4(
+      0.451f * M * sin(time * 0.96456f),
+      0.435f * M * cos(time * 0.59237f),
+      0.396f * M * sin(time * 0.73426f),
+      0.425f * M * cos(time * 0.42379f)
+    ));
+  }
+
+  vec3 getNormal(vec3 p, float time) {
+    vec2 e(0, Epsilon);
+
+    vec3 n(
+      map(p + e.yxx, time),
+      map(p + e.xyx, time),
+      map(p + e.xxy, time)
+    );
+    return normalize(n - map(p, time));
+  }
+
+  float getAO(vec3 p, vec3 n, float time) {
+    const float R = 3.0;
+    const float D = 0.8;
+    float r = 0;
+    for(int i = 0; i < AOSamples; ++i) {
+      float f = (float)i / AOSamples;
+      float h = 0.1f + f * R;
+      float d = map(p + n * h, time);
+      r += clamp(h * D - d, 0.f, 1.f) * (1 - f);
+    }
+    return clamp(1 - r, 0.f, 1.f);
+  }
+
+  float spheretracing(vec3 ori, vec3 dir, float time, vec3& p) {
+    float t = 0;
+    for(int i = 0; i < NumSteps; ++i) {
+      p = ori + dir * t;
+      float d = map(p, time);
+      if(d <= 0 || t > 2)
+        break;
+
+      t += max(d * .3f, Epsilon);
+    }
+    return step(t, 2.f);
+  }
+
+  vec4 render(vec2 frag_coord, shadertoy_uniforms_t u) {
+    vec2 uv = frag_coord / u.resolution;
+    uv = 2 * uv - 1;
+    uv.x *= u.resolution.x / u.resolution.y;
+    float time = Speed * u.time;
+    vec2 sc = vec2(sin(time), cos(time));
+
+    // tracing of distance map
+    vec3 ori(0, 0, Zoom);
+    vec3 dir = normalize(vec3(uv, -1));
+    ori.xz = vec2(ori.x * sc.y - ori.z * sc.x, ori.x * sc.x + ori.z * sc.y);
+    dir.xz = vec2(dir.x * sc.y - dir.z * sc.x, dir.x * sc.x + dir.z * sc.y);
+
+    vec3 p;
+    float mask = spheretracing(ori, dir, time, p);
+    vec3 n = getNormal(p, time);
+    float ao = pow(getAO(p, n, time), 2.2f);
+    ao *= .5f * n.y + .5f;
+
+    // bg
+    vec3 bg = mix(
+      mix(0, BG, smoothstep(-1.f, 1.f, uv.y)),
+      mix(.5f * BG, 0, smoothstep(-1.f, 1.f, uv.x)),
+      smoothstep(-1.f, 1.f, uv.x)
+    );
+    bg *= 0.8f + 0.2f * smoothstep(0.1f, 0.0f, sin((uv.x - uv.y) * 40));
+
+    // color
+    vec3 l0(0, 0, -1);
+    vec3 l1 = normalize(vec3(.3f, .5f, .5f));
+    vec3 l2(0, 1, 0);
+
+    vec3 color = Red * .4f;
+    color += specular(n, l0, dir, 1.f) * Red;
+    color += specular(n, l1, dir, 1.f) * Orange * 1.1f;
+    color *= 4 * ao;
+
+    color = mix(bg, color, mask);
+
+    color = pow(color, .4545f);
+    return vec4(color, 1);
+  }
+
+  static constexpr float Epsilon = 1e-5f;
+
+  [[.imgui::range_float { -1, 1 }]] float Speed = .1;
+  [[.imgui::range_float { .8, 2 }]] float Zoom = 1.5f;
+  [[.imgui::range_int {8, 256}]] int NumSteps = 128;
+  [[.imgui::range_int {0, 16}]] int AOSamples = 3;
+  [[.imgui::color3]] vec3 Red = vec3(.6, .03, .08);
+  [[.imgui::color3]] vec3 Orange = vec3(.3, .1, .1);
+  [[.imgui::color3]] vec3 BG = vec3(0.05, 0.05, 0.075);
+
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 enum typename class shader_program_t {
@@ -1293,7 +1446,8 @@ enum typename class shader_program_t {
 */
 
   band_limited1_t,
-  band_limited2_t
+  band_limited2_t,
+  hypercomplex_t
 };
 
 
