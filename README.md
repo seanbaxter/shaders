@@ -1796,8 +1796,7 @@ enum typename class shader_program_t {
   Square = keep_up_square_t,
   Paint = paint_t,
   MengerJourney = menger_journey_t,
-  MouseTest = mouse_test_t,
-
+  HyperComplex = hypercomplex_t,
   SphereTracer = tracer_engine_t<
     "Sphere tracer (Click to display step counts)", 
     sphere_tracer_t, 
@@ -1813,6 +1812,8 @@ enum typename class shader_program_t {
     std::pair<sphere_tracer_t, segment_tracer_t>, 
     blobs_t
   >,
+  band_limited1_t,
+  band_limited2_t,
 };
 ```
 
