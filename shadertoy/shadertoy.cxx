@@ -1116,10 +1116,9 @@ struct palette_t {
     if codegen(__is_spirv_target)
       w = glfrag_fwidth(x);
 
-    x = Approximate ?
+    return Approximate ?
       cos(x) * smoothstep(PI2, 0.f, w) :
       cos(x) * sin(.5f * w) / (.5f * w);
-    return x;
   }
 
   vec3 mcos(vec3 x, bool mode) const {
@@ -1142,15 +1141,15 @@ struct palette_t {
   static constexpr float PI2 = 2 * M_PIf32;
 
   bool Approximate = true;
-  [[.imgui::color3]] vec3 color0 = vec3(0.5, 0.5, 0.4);
-  [[.imgui::color3]] vec3 color1 = vec3(0.0, 0.5, 0.6);
-  [[.imgui::color3]] vec3 color2 = vec3(0.5, 0.6, 1.0);
-  [[.imgui::color3]] vec3 color3 = vec3(0.1, 0.7, 1.1);
-  [[.imgui::color3]] vec3 color4 = vec3(0.1, 0.5, 1.2);
-  [[.imgui::color3]] vec3 color5 = vec3(0.0, 0.3, 0.9);
-  [[.imgui::color3]] vec3 color6 = vec3(0.1, 0.5, 1.3);
-  [[.imgui::color3]] vec3 color7 = vec3(0.1, 0.5, 1.3);
-  [[.imgui::color3]] vec3 color8 = vec3(0.3, 0.2, 0.8);
+  vec3 color0 = vec3(0.5, 0.5, 0.4);
+  vec3 color1 = vec3(0.0, 0.5, 0.6);
+  vec3 color2 = vec3(0.5, 0.6, 1.0);
+  vec3 color3 = vec3(0.1, 0.7, 1.1);
+  vec3 color4 = vec3(0.1, 0.5, 1.2);
+  vec3 color5 = vec3(0.0, 0.3, 0.9);
+  vec3 color6 = vec3(0.1, 0.5, 1.3);
+  vec3 color7 = vec3(0.1, 0.5, 1.3);
+  vec3 color8 = vec3(0.3, 0.2, 0.8);
 };
 
 struct [[
@@ -1159,14 +1158,13 @@ struct [[
 ]] band_limited1_t {
 
   vec4 render(vec2 frag_coord, shadertoy_uniforms_t u) const {
-    
     vec2 q = (2 * frag_coord - u.resolution) / u.resolution.y;
     float time = Speed * u.time;
 
     // Separation.
-    float th = (u.mouse.z > .001f) ? 
-      (2 * u.mouse.x - u.resolution.x) / u.resolution.y :
-      1.8f * sin(time);
+    float th = Sweep ? 
+      1.8f * sin(time) :
+      (2 * u.mouse.x - u.resolution.x) / u.resolution.y;
     bool mode = q.x < th;
 
     // Deformation.
@@ -1195,9 +1193,73 @@ struct [[
   }
 
   [[.imgui::range_float { 0, 3 }]] float Speed = 1.8f;
+
+  bool Sweep = true;
   palette_t palette;
 };
 
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct [[
+  .imgui::title="Band limited synthesis 2",
+  .imgui::url="https://www.shadertoy.com/view/wtXfRH"
+]] band_limited2_t {
+
+  vec2 deform(vec2 p, float time) {
+    // deform 1
+    p *= .25f;
+    p = .5f * p / dot(p, p);
+    p.x += Shift * time;
+
+    // deform 2
+    if(!Tubularity) {
+      p += .2f * cos(1.5f * p.yx + .03f * 1.0f * time + vec2(0.1, 1.1));
+      p += .2f * cos(2.4f * p.yx + .03f * 1.6f * time + vec2(4.5, 2.6));
+      p += .2f * cos(3.3f * p.yx + .03f * 1.2f * time + vec2(3.2, 3.4));
+      p += .2f * cos(4.2f * p.yx + .03f * 1.7f * time + vec2(1.8, 5.2));
+      p += .2f * cos(9.1f * p.yx + .03f * 1.1f * time + vec2(6.3, 3.9));
+    }
+    return p;
+  }
+
+  vec4 render(vec2 frag_coord, shadertoy_uniforms_t u) {
+    vec2 p = (2 * frag_coord - u.resolution) / u.resolution.y;
+    float time = Speed * u.time;
+
+    vec2 w = p;
+
+    // separation
+    float th = Sweep ? 
+      1.8f * sin(time) :
+      (2 * u.mouse.x - u.resolution.x) / u.resolution.y;
+    bool mode = w.x < th;
+
+    // deformation
+    p = deform(p, time);
+
+    // base color pattern
+    vec3 col = palette.get_color(.5f * length(p), mode);
+
+    // lighting
+    col *= 1.4f - .14f / length(w);
+
+    // separation
+    col *= smoothstep(.005f, .010f, abs(w.x - th));
+
+    // palette
+    if(w.y < -0.9f) 
+      col = palette.get_color(frag_coord.x / u.resolution.x, mode);
+
+    return vec4(col, 1);
+  }
+
+  [[.imgui::range_float { 0, 3 }]] float Speed = 1.8f;
+  [[.imgui::range_float { 0, 1 }]] float Shift = .1f;
+  bool Sweep = true;
+  bool Tubularity = false;
+  palette_t palette;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1230,7 +1292,8 @@ enum typename class shader_program_t {
 #endif
 */
 
-  band_limited1_t
+  band_limited1_t,
+  band_limited2_t
 };
 
 
