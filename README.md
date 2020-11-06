@@ -52,7 +52,7 @@
 
     [![egg](images/egg_small.png)](#reflection-and-attributes-for-shadertoy-development)
     [![bands](images/bands_small.png)](#reflection-and-attributes-for-shadertoy-development)
-    [![menger](images/menger_small.png)](#reflection-and-attributes-for-shadertoy-development)
+    [![hypercomplex](images/hypercomplex_small.png)](#reflection-and-attributes-for-shadertoy-development)
     [![segment_tracer](images/segment_tracer_small.png)](#reflection-and-attributes-for-shadertoy-development)
     * [User attributes](#user-attributes)
     * [User attributes and Dear ImGui](#user-attributes-and-dear-imgui)
@@ -1307,7 +1307,9 @@ A `reinterpret_cast` or C-style cast between pointers to arithmetic types with t
 [![modulation](images/modulation_small.png)](images/modulation.png)
 [![square](images/square_small.png)](images/square.png)
 [![menger](images/menger_small.png)](images/menger.png)
+[![hypecomplex](images/hypercomplex_small.png)](images/hypercomplex.png)
 [![segment_tracer](images/segment_tracer_small.png)](images/segment_tracer.png)
+[![band_limited](images/bandlimited_small.png)](images/bandlimited.png)
 
 [Shadertoy](https://www.shadertoy.com/) is an incredible creative showcase for graphics programmers. The host provides some basic uniform variables like `iResolution` and `iTime`. You provide the fragment shader. A full-window quad is drawn once per frame, and amazing imagery comes out.
 
@@ -1701,7 +1703,7 @@ The uniform buffer is a struct that may have struct members. In this case, `std:
 
 ![segment_tracer](images/segment_tracer.png)
 
-**NOTE:** This sample uses features from Circle build 101. Download it [here](https://www.circle-lang.org/index.html#the-program). 
+**NOTE:** This sample uses features from Circle build 102. Download it [here](https://www.circle-lang.org/index.html#the-program). 
 
 Ray marching is the most popular approach to rendering procedural geometries. You can define a [signed distance field](https://iquilezles.org/www/articles/distfunctions/distfunctions.htm) for simple primitives and combine them with elementary functions like min, max, mod, sum, sine and cosine, and so on, to generate infinitely detailed worlds. Scalar fields, like the one shown here, work similarly.
 
