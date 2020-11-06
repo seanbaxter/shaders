@@ -51,18 +51,46 @@ bool render_imgui(options_t& options, const char* child_name = nullptr) {
       auto& value = @member_value(options, i);
 
       if constexpr(@member_has_attribute(options_t, i, color4)) {
+        static_assert(std::is_same_v<type_t, vec4>);
         changed |= ImGui::ColorEdit4(name, &value.x);
 
       } else if constexpr(@member_has_attribute(options_t, i, color3)) {
+        static_assert(std::is_same_v<type_t, vec3>);
         changed |= ImGui::ColorEdit3(name, &value.x);
 
       } else if constexpr(@member_has_attribute(options_t, i, range_float)) {
-        auto minmax = @member_attribute(options_t, i, range_float);
-        changed |= ImGui::SliderFloat(name, &value, minmax.min, minmax.max);
+        auto range = @member_attribute(options_t, i, range_float);
+
+        if constexpr(std::is_same_v<type_t, vec4>) {
+          changed |= ImGui::SliderFloat4(name, &value.x, range.min, range.max);
+
+        } else if constexpr(std::is_same_v<type_t, vec3>) {
+          changed |= ImGui::SliderFloat3(name, &value.x, range.min, range.max);
+
+        } else if constexpr(std::is_same_v<type_t, vec2>) {
+          changed |= ImGui::SliderFloat2(name, &value.x, range.min, range.max);
+
+        } else {
+          static_assert(std::is_same_v<type_t, float>);
+          changed |= ImGui::SliderFloat(name, &value, range.min, range.max);
+        }
 
       } else if constexpr(@member_has_attribute(options_t, i, range_int)) {
-        auto minmax = @member_attribute(options_t, i, range_int);
-        changed |= ImGui::SliderInt(name, &value, minmax.min, minmax.max);
+        auto range = @member_attribute(options_t, i, range_int);
+
+        if constexpr(std::is_same_v<type_t, ivec4>) {
+          changed |= ImGui::SliderInt4(name, &value.x, range.min, range.max);
+
+        } else if constexpr(std::is_same_v<type_t, ivec3>) {
+          changed |= ImGui::SliderInt3(name, &value.x, range.min, range.max);
+
+        } else if constexpr(std::is_same_v<type_t, ivec2>) {
+          changed |= ImGui::SliderInt2(name, &value.x, range.min, range.max);
+
+        } else {
+          static_assert(std::is_same_v<type_t, int>);
+          changed |= ImGui::SliderInt(name, &value, range.min, range.max);
+        }
 
       } else if constexpr(std::is_same_v<type_t, bool>) {
         changed |= ImGui::Checkbox(name, &value);
@@ -1312,13 +1340,12 @@ struct [[
   }
 
   float map(vec3 p, float time) {
-    const float M = 0.6f;
     time += 2 * rsq(.5f * time);
     return julia(p, vec4(
-      0.451f * M * sin(time * 0.96456f),
-      0.435f * M * cos(time * 0.59237f),
-      0.396f * M * sin(time * 0.73426f),
-      0.425f * M * cos(time * 0.42379f)
+      Amplitudes.x * M * sin(time * Frequencies.x),
+      Amplitudes.y * M * cos(time * Frequencies.y),
+      Amplitudes.z * M * sin(time * Frequencies.z),
+      Amplitudes.w * M * cos(time * Frequencies.w)
     ));
   }
 
@@ -1363,8 +1390,7 @@ struct [[
     vec2 uv = frag_coord / u.resolution;
     uv = 2 * uv - 1;
     uv.x *= u.resolution.x / u.resolution.y;
-    float time = Speed * u.time;
-    vec2 sc = vec2(sin(time), cos(time));
+    vec2 sc = vec2(sin(RotationSpeed * u.time), cos(RotationSpeed * u.time));
 
     // tracing of distance map
     vec3 ori(0, 0, Zoom);
@@ -1372,6 +1398,7 @@ struct [[
     ori.xz = vec2(ori.x * sc.y - ori.z * sc.x, ori.x * sc.x + ori.z * sc.y);
     dir.xz = vec2(dir.x * sc.y - dir.z * sc.x, dir.x * sc.x + dir.z * sc.y);
 
+    float time = MorphSpeed * u.time;
     vec3 p;
     float mask = spheretracing(ori, dir, time, p);
     vec3 n = getNormal(p, time);
@@ -1404,10 +1431,16 @@ struct [[
 
   static constexpr float Epsilon = 1e-5f;
 
-  [[.imgui::range_float { -1, 1 }]] float Speed = .1;
-  [[.imgui::range_float { .8, 2 }]] float Zoom = 1.5f;
+  [[.imgui::range_float { -1, 1 }]] float RotationSpeed = .1;
+  [[.imgui::range_float { -1, 1 }]] float MorphSpeed = .53;
+  [[.imgui::range_float { .8, 2 }]] float Zoom = 1.3;
+  [[.imgui::range_float {.1, 1 }]] float M = .68;
+  [[.imgui::range_float {0, 2 }]] vec4 Amplitudes = vec4(.451, .435, .396, .425);
+  [[.imgui::range_float {0, 2 }]] vec4 Frequencies = vec4(.96456, .59237, .73426, .42379);
+
   [[.imgui::range_int {8, 256}]] int NumSteps = 128;
   [[.imgui::range_int {0, 16}]] int AOSamples = 3;
+
   [[.imgui::color3]] vec3 Red = vec3(.6, .03, .08);
   [[.imgui::color3]] vec3 Orange = vec3(.3, .1, .1);
   [[.imgui::color3]] vec3 BG = vec3(0.05, 0.05, 0.075);
