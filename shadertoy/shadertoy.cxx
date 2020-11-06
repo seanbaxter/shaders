@@ -1,3 +1,7 @@
+#if __circle_build__ < 102
+#error "Circle build 102 required to reliably compile this sample"
+#endif
+
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
@@ -28,6 +32,9 @@ namespace imgui {
   };
   using range_float [[attribute]] = minmax_t<float>;
   using range_int   [[attribute]] = minmax_t<int>;
+
+  // Resolution for drag.
+  using drag_float [[attribute]] = float;
 
   using title    [[attribute]] = const char*;
   using url      [[attribute]] = const char*;
@@ -73,6 +80,23 @@ bool render_imgui(options_t& options, const char* child_name = nullptr) {
         } else {
           static_assert(std::is_same_v<type_t, float>);
           changed |= ImGui::SliderFloat(name, &value, range.min, range.max);
+        }
+
+      } else if constexpr(@member_has_attribute(options_t, i, drag_float)) {
+        auto drag = @member_attribute(options_t, i, drag_float);
+
+        if constexpr(std::is_same_v<type_t, vec4>) {
+          changed |= ImGui::DragFloat4(name, &value.x, drag);
+
+        } else if constexpr(std::is_same_v<type_t, vec3>) {
+          changed |= ImGui::DragFloat3(name, &value.x, drag);
+
+        } else if constexpr(std::is_same_v<type_t, vec2>) {
+          changed |= ImGui::DragFloat2(name, &value.x, drag);
+
+        } else {
+          static_assert(std::is_same_v<type_t, float>);
+          changed |= ImGui::DragFloat(name, &value, drag);
         }
 
       } else if constexpr(@member_has_attribute(options_t, i, range_int)) {
@@ -1134,6 +1158,7 @@ struct [[
       nz.w = 2 * (z.x * z.w - z.y * z.z);
       z = nz + q;
       z2 = dot(z, z);
+
       if(z2 > 4)
         break;
     }
@@ -1185,7 +1210,9 @@ struct [[
     for(int i = 0; i < NumSteps; ++i) {
       p = ori + dir * t;
       float d = map(p, time);
-      if(d <= 0 || t > 2)
+
+      // Workaround for structurization bug.
+      if(d <= 0 | t > 2)
         break;
 
       t += max(d * .3f, Epsilon);
@@ -1251,7 +1278,6 @@ struct [[
   [[.imgui::color3]] vec3 Red = vec3(.6, .03, .08);
   [[.imgui::color3]] vec3 Orange = vec3(.3, .1, .1);
   [[.imgui::color3]] vec3 BG = vec3(0.05, 0.05, 0.075);
-
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1290,15 +1316,15 @@ struct palette_t {
   static constexpr float PI2 = 2 * M_PIf32;
 
   bool Approximate = true;
-  vec3 color0 = vec3(0.5, 0.5, 0.4);
-  vec3 color1 = vec3(0.0, 0.5, 0.6);
-  vec3 color2 = vec3(0.5, 0.6, 1.0);
-  vec3 color3 = vec3(0.1, 0.7, 1.1);
-  vec3 color4 = vec3(0.1, 0.5, 1.2);
-  vec3 color5 = vec3(0.0, 0.3, 0.9);
-  vec3 color6 = vec3(0.1, 0.5, 1.3);
-  vec3 color7 = vec3(0.1, 0.5, 1.3);
-  vec3 color8 = vec3(0.3, 0.2, 0.8);
+  [[.imgui::drag_float(.01)]] vec3 color0 = vec3(0.5, 0.5, 0.4);
+  [[.imgui::drag_float(.01)]] vec3 color1 = vec3(0.0, 0.5, 0.6);
+  [[.imgui::drag_float(.01)]] vec3 color2 = vec3(0.5, 0.6, 1.0);
+  [[.imgui::drag_float(.01)]] vec3 color3 = vec3(0.1, 0.7, 1.1);
+  [[.imgui::drag_float(.01)]] vec3 color4 = vec3(0.1, 0.5, 1.2);
+  [[.imgui::drag_float(.01)]] vec3 color5 = vec3(0.0, 0.3, 0.9);
+  [[.imgui::drag_float(.01)]] vec3 color6 = vec3(0.1, 0.5, 1.3);
+  [[.imgui::drag_float(.01)]] vec3 color7 = vec3(0.1, 0.5, 1.3);
+  [[.imgui::drag_float(.01)]] vec3 color8 = vec3(0.3, 0.2, 0.8);
 };
 
 struct [[
@@ -1324,7 +1350,7 @@ struct [[
 
     // Texture
     vec3 col = min(
-      palette.get_color(p.x, mode), 
+      palette.get_color(p.x, mode),
       palette.get_color(p.y, mode)
     );
 
@@ -1409,39 +1435,31 @@ struct [[
 
 ////////////////////////////////////////////////////////////////////////////////
 
-enum typename class shader_program_t {DevilEgg = devil_egg_t,
-  // DevilEgg = devil_egg_t,
-  // HypnoBands = hypno_bands_t,
-  // Modulation = modulation_t,
-  // Square = keep_up_square_t,
-  // Paint = paint_t,
-  // MengerJourney = menger_journey_t,
-
-#if __circle_build__ >= 102
-
-  // HyperComplex = hypercomplex_t,
-// 
-  // // Requires Circle 101
-  // SphereTracer = tracer_engine_t<
-  //   "Sphere tracer (Click to display step counts)", 
-  //   sphere_tracer_t, 
-  //   blobs_t
-  // >,
-  // SegmentTracer = tracer_engine_t<
-  //   "Segment tracer (Click to display step counts)", 
-  //   segment_tracer_t, 
-  //   blobs_t
-  // >,
-  // DualTracer = tracer_engine_t<
-  //   "Tracer comparison (Left is sphere tracing, right is segment tracing", 
-  //   std::pair<sphere_tracer_t, segment_tracer_t>, 
-  //   blobs_t
-  // >,
-
+enum typename class shader_program_t {
+  DevilEgg = devil_egg_t,
+  HypnoBands = hypno_bands_t,
+  Modulation = modulation_t,
+  Square = keep_up_square_t,
+  Paint = paint_t,
+  MengerJourney = menger_journey_t,
+  HyperComplex = hypercomplex_t,
+  SphereTracer = tracer_engine_t<
+    "Sphere tracer (Click to display step counts)", 
+    sphere_tracer_t, 
+    blobs_t
+  >,
+  SegmentTracer = tracer_engine_t<
+    "Segment tracer (Click to display step counts)", 
+    segment_tracer_t, 
+    blobs_t
+  >,
+  DualTracer = tracer_engine_t<
+    "Tracer comparison (Left is sphere tracing, right is segment tracing", 
+    std::pair<sphere_tracer_t, segment_tracer_t>, 
+    blobs_t
+  >,
   band_limited1_t,
- // band_limited2_t,
-
-#endif
+  band_limited2_t,
 };
 
 
