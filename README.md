@@ -88,7 +88,7 @@ Working on this compiler has exposed _a lot_ of graphics driver bugs. The vendor
 
 * **NVIDIA**: You must use the newest [Vulkan beta driver 455.26.xx](https://developer.nvidia.com/vulkan-driver). It must be the beta driver. A release driver will fail in the teacups (segfault) and ray-tracing samples (no pretty pictures, just sky). The geometry shader sample incorporates a source-code workaround (so that geometry won't disappear), and the compiler itself has a workaround to prevent a segfault in the glTF sample viewer. The workarounds will be removed as driver bugs are fixed.
 
-* **INTEL**: Use a recent release driver. The driver fails when binding different resources to the same object within a SPIR-V module, and this breaks the teacup and shadertoy samples. Also `OpRuntimeArray` is not implemented for OpenGL which breaks nbody. Check out the [intel](https://github.com/seanbaxter/shaders/tree/intel) branch in this repository for Intel-compatible source for all the samples.
+* **INTEL**: Use a recent release driver. The driver fails when binding different resources to the same object within a SPIR-V module, and this breaks the teacup and shadertoy samples. Also `OpRuntimeArray` is not implemented for OpenGL which breaks nbody. Check out the [intel](https://github.com/seanbaxter/shaders/tree/intel) branch in this repository for Intel-compatible source for all the samples. Note that this branch significantly trails the master branch; namely, it lacks many of the advanced Shadertoy shaders. A bug has been filed against Mesa for this.
 
 * **AMD**: AMD on Linux is built on the same Mesa driver that Intel uses. Use the intel branch until the Mesa bugs are fixed.
 
@@ -770,24 +770,22 @@ enum typename vattrib_t {
 
 [[spirv::geom(points, triangle_strip, 24)]]
 void geom_main() {
-  // Use vec4 as a workaround for NVIDIA driver bug.
-  // https://developer.nvidia.com/nvidia_bug/3149892
-  static constexpr vec4 vertices[6][4] {
-    { {  1,  1,  1, 0 }, {  1, -1,  1, 0 }, {  1,  1, -1, 0 }, {  1, -1, -1, 0 } },
-    { {  1,  1,  1, 0 }, { -1,  1,  1, 0 }, {  1, -1,  1, 0 }, { -1, -1,  1, 0 } },
-    { {  1,  1,  1, 0 }, {  1,  1, -1, 0 }, { -1,  1,  1, 0 }, { -1,  1, -1, 0 } },
-    { { -1, -1, -1, 0 }, { -1,  1, -1, 0 }, {  1, -1, -1, 0 }, {  1,  1, -1, 0 } },
-    { { -1, -1, -1, 0 }, { -1, -1,  1, 0 }, { -1,  1, -1, 0 }, { -1,  1,  1, 0 } },
-    { { -1, -1, -1, 0 }, {  1, -1, -1, 0 }, { -1, -1,  1, 0 }, {  1, -1,  1, 0 } },
+  static constexpr vec3 vertices[6][4] {
+    { {  1,  1,  1 }, {  1, -1,  1 }, {  1,  1, -1 }, {  1, -1, -1 } },
+    { {  1,  1,  1 }, { -1,  1,  1 }, {  1, -1,  1 }, { -1, -1,  1 } },
+    { {  1,  1,  1 }, {  1,  1, -1 }, { -1,  1,  1 }, { -1,  1, -1 } },
+    { { -1, -1, -1 }, { -1,  1, -1 }, {  1, -1, -1 }, {  1,  1, -1 } },
+    { { -1, -1, -1 }, { -1, -1,  1 }, { -1,  1, -1 }, { -1,  1,  1 } },
+    { { -1, -1, -1 }, {  1, -1, -1 }, { -1, -1,  1 }, {  1, -1,  1 } },
   };
 
-  static constexpr vec4 normals[6] {
-    { 1,  0,  0, 1 }, {  0,  0,  1, 1 }, { 0,  1,  0, 1 },
-    { 0,  0, -1, 1 }, { -1,  0,  0, 1 }, { 0, -1,  0, 1 },
+  static constexpr vec3 normals[6] {
+    { 1,  0,  0 }, {  0,  0,  1 }, { 0,  1,  0 },
+    { 0,  0, -1 }, { -1,  0,  0 }, { 0, -1,  0 },
   };
 
-  static constexpr vec4 uv[4] {
-    { 0, 1, 0, 0 }, { 1, 1, 0, 0 }, { 0, 0, 0, 0 }, { 1, 0, 0, 0 },
+  static constexpr vec2 uv[4] {
+    { 0, 1 }, { 1, 1 }, { 0, 0 }, { 1, 0 },
   };
 
   float phi = radians(30.f);
@@ -804,17 +802,17 @@ void geom_main() {
   vec4 position = glgeom_Input[0].Position;
 
   for(int face = 0; face < 6; ++face) {
-    float brightness = clamp(-dot(normals[face].xyz, light_dir), ambient, 1.f);
+    float brightness = clamp(-dot(normals[face], light_dir), ambient, 1.f);
 
     shader_out<vattrib_color> = brightness * vec3(.8, 1.2, 1.2);
 
     for(int i = 0; i < 4; ++i) {
       // Create a new vertex and project.
-      vec4 vertex = position + vec4(box_size * vertices[face][i].xyz, 0);
+      vec4 vertex = position + vec4(box_size * vertices[face][i], 0);
       glgeom_Output.Position = view_mat * vertex;
       
       // Create a new uv coordinate.
-      shader_out<vattrib_texcoord> = uv[i].xy;
+      shader_out<vattrib_texcoord> = uv[i];
 
       // Emit the vertex.
       glgeom_EmitVertex(); 
