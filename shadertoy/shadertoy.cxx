@@ -1,5 +1,5 @@
-#if __circle_build__ < 102
-#error "Circle build 102 required to reliably compile this sample"
+#if __circle_build__ < 103
+#error "Circle build 103 required to reliably compile this sample"
 #endif
 
 #include <imgui.h>

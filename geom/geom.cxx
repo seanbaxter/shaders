@@ -1,3 +1,7 @@
+#if __circle_build__ < 103
+#error "Circle build 103 required to reliably compile this sample"
+#endif
+
 #include "appglfw.hxx"
 
 #define STB_IMAGE_IMPLEMENTATION
