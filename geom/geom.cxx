@@ -22,24 +22,22 @@ mat4 view_mat;
 
 [[spirv::geom(points, triangle_strip, 24)]]
 void geom_main() {
-  // Use vec4 as a workaround for NVIDIA driver bug.
-  // https://developer.nvidia.com/nvidia_bug/3149892
-  static constexpr vec4 vertices[6][4] {
-    { {  1,  1,  1, 0 }, {  1, -1,  1, 0 }, {  1,  1, -1, 0 }, {  1, -1, -1, 0 } },
-    { {  1,  1,  1, 0 }, { -1,  1,  1, 0 }, {  1, -1,  1, 0 }, { -1, -1,  1, 0 } },
-    { {  1,  1,  1, 0 }, {  1,  1, -1, 0 }, { -1,  1,  1, 0 }, { -1,  1, -1, 0 } },
-    { { -1, -1, -1, 0 }, { -1,  1, -1, 0 }, {  1, -1, -1, 0 }, {  1,  1, -1, 0 } },
-    { { -1, -1, -1, 0 }, { -1, -1,  1, 0 }, { -1,  1, -1, 0 }, { -1,  1,  1, 0 } },
-    { { -1, -1, -1, 0 }, {  1, -1, -1, 0 }, { -1, -1,  1, 0 }, {  1, -1,  1, 0 } },
+  static constexpr vec3 vertices[6][4] {
+    { {  1,  1,  1 }, {  1, -1,  1 }, {  1,  1, -1 }, {  1, -1, -1 } },
+    { {  1,  1,  1 }, { -1,  1,  1 }, {  1, -1,  1 }, { -1, -1,  1 } },
+    { {  1,  1,  1 }, {  1,  1, -1 }, { -1,  1,  1 }, { -1,  1, -1 } },
+    { { -1, -1, -1 }, { -1,  1, -1 }, {  1, -1, -1 }, {  1,  1, -1 } },
+    { { -1, -1, -1 }, { -1, -1,  1 }, { -1,  1, -1 }, { -1,  1,  1 } },
+    { { -1, -1, -1 }, {  1, -1, -1 }, { -1, -1,  1 }, {  1, -1,  1 } },
   };
 
-  static constexpr vec4 normals[6] {
-    { 1,  0,  0, 1 }, {  0,  0,  1, 1 }, { 0,  1,  0, 1 },
-    { 0,  0, -1, 1 }, { -1,  0,  0, 1 }, { 0, -1,  0, 1 },
+  static constexpr vec3 normals[6] {
+    { 1,  0,  0 }, {  0,  0,  1 }, { 0,  1,  0 },
+    { 0,  0, -1 }, { -1,  0,  0 }, { 0, -1,  0 },
   };
 
-  static constexpr vec4 uv[4] {
-    { 0, 1, 0, 0 }, { 1, 1, 0, 0 }, { 0, 0, 0, 0 }, { 1, 0, 0, 0 },
+  static constexpr vec2 uv[4] {
+    { 0, 1 }, { 1, 1 }, { 0, 0 }, { 1, 0 },
   };
 
   float phi = radians(30.f);
@@ -56,17 +54,17 @@ void geom_main() {
   vec4 position = glgeom_Input[0].Position;
 
   for(int face = 0; face < 6; ++face) {
-    float brightness = clamp(-dot(normals[face].xyz, light_dir), ambient, 1.f);
+    float brightness = clamp(-dot(normals[face], light_dir), ambient, 1.f);
 
     shader_out<vattrib_color> = brightness * vec3(.8, 1.2, 1.2);
 
     for(int i = 0; i < 4; ++i) {
       // Create a new vertex and project.
-      vec4 vertex = position + vec4(box_size * vertices[face][i].xyz, 0);
+      vec4 vertex = position + vec4(box_size * vertices[face][i], 0);
       glgeom_Output.Position = view_mat * vertex;
       
       // Create a new uv coordinate.
-      shader_out<vattrib_texcoord> = uv[i].xy;
+      shader_out<vattrib_texcoord> = uv[i];
 
       // Emit the vertex.
       glgeom_EmitVertex(); 
