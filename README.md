@@ -54,6 +54,8 @@
     [![bands](images/bands_small.png)](#reflection-and-attributes-for-shadertoy-development)
     [![hypercomplex](images/hypercomplex_small.png)](#reflection-and-attributes-for-shadertoy-development)
     [![segment_tracer](images/segment_tracer_small.png)](#reflection-and-attributes-for-shadertoy-development)
+    [![raymarcher](images/raymarcher.png)](#reflection-and-attributes-for-shadertoy-development)
+    [![bandlimited](images/bandlimited.png)](#reflection-and-attributes-for-shadertoy-development)
     * [User attributes](#user-attributes)
     * [User attributes and Dear ImGui](#user-attributes-and-dear-imgui)
     * [Shader programming with composition](#shader-programming-with-composition)
@@ -1308,6 +1310,8 @@ A `reinterpret_cast` or C-style cast between pointers to arithmetic types with t
 [![hypecomplex](images/hypercomplex_small.png)](images/hypercomplex.png)
 [![segment_tracer](images/segment_tracer_small.png)](images/segment_tracer.png)
 [![band_limited](images/bandlimited_small.png)](images/bandlimited.png)
+[![raymarcher](images/raymarcher_small.png)](images/raymarcher.png)
+[![raymarcher2](images/raymarcher2_small.png)](images/raymarcher2.png)
 
 [Shadertoy](https://www.shadertoy.com/) is an incredible creative showcase for graphics programmers. The host provides some basic uniform variables like `iResolution` and `iTime`. You provide the fragment shader. A full-window quad is drawn once per frame, and amazing imagery comes out.
 

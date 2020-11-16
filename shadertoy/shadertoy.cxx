@@ -1432,6 +1432,724 @@ struct [[
   palette_t palette;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
+// The MIT License
+// Copyright © 2013 Inigo Quilez
+// Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+// A list of useful distance function to simple primitives. All
+// these functions (except for ellipsoid) return an exact
+// euclidean distance, meaning they produce a better SDF than
+// what you'd get if you were constructing them from boolean
+// operations.
+//
+// More info here:
+//
+// https://www.iquilezles.org/www/articles/distfunctions/distfunctions.htm
+
+inline float sq(float x) noexcept { return x * x; }
+inline float dot2(vec2 v) noexcept { return dot(v, v); }
+inline float dot2(vec3 v) noexcept { return dot(v, v); }
+inline float ndot(vec2 a, vec2 b) noexcept { return a.x * b.x - a.y * b.y; }
+
+struct sphere_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+    return length(p) - s;
+  }
+
+  vec3 pos;
+  float s;
+};
+
+struct box_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+    vec3 d = abs(p) - b;
+    return min(max(d.x, max(d.y, d.z)), 0.f) + length(max(d, 0.f));
+  }
+
+  vec3 pos;
+  vec3 b;
+};
+
+struct bounding_box_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+    p = abs(p) - b;
+    vec3 q = abs(p + e) - e;
+    return min(min(
+      length(max(vec3(p.x,q.y,q.z),0.f))+min(max(p.x,max(q.y,q.z)),0.f),
+      length(max(vec3(q.x,p.y,q.z),0.f))+min(max(q.x,max(p.y,q.z)),0.f)),
+      length(max(vec3(q.x,q.y,p.z),0.f))+min(max(q.x,max(q.y,p.z)),0.f));
+  }
+
+  vec3 pos;
+  vec3 b;
+  float e;
+};
+
+struct ellipsoid_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+    float k0 = length(p / r);
+    float k1 = length(p / (r * r));
+    return k0 * (k0 - 1) / k1;
+  }
+
+  vec3 pos;
+  vec3 r;
+};
+
+struct torus_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+    return length(vec2(length(p.xz) - t.x, p.y)) - t.y;
+  }
+
+  vec3 pos;
+  vec2 t;
+};
+
+struct capped_torus_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+    p.x = abs(p.x);
+    float k = (sc.y * p.x > sc.x * p.y) ? dot(p.xy, sc) : length(p.xy);
+    return sqrt(dot2(p) + ra * ra - 2 * ra * k) - rb;
+  }
+
+  vec3 pos;
+  vec2 sc;
+  float ra, rb;
+};
+
+struct hex_prism_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+    vec3 q = abs(p);
+
+    const vec3 k = vec3(-0.8660254, 0.5, 0.57735);
+    p = q;
+
+    p.xy -= 2 * min(dot(k.xy, p.xy), 0.f) * k.xy;
+    vec2 d(
+      length(p.xy - vec2(clamp(p.x, -k.z*h.x, k.z*h.x), h.x)) * sign(p.y - h.x),
+      p.z - h.y
+    );
+    return min(max(d.x, d.y), 0.f) + length(max(d, 0.f));
+  }
+
+  vec3 pos;
+  vec2 h;
+};
+
+struct octagon_prism_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+
+    const vec3 k = vec3(
+      -0.9238795325,   // sqrt(2+sqrt(2))/2 
+       0.3826834323,   // sqrt(2-sqrt(2))/2
+       0.4142135623    // sqrt(2)-1 
+    ); 
+
+    // reflections
+    p = abs(p);
+    p.xy -= 2 * min(dot(vec2( k.x, k.y), p.xy), 0.f) * vec2( k.x, k.y);
+    p.xy -= 2 * min(dot(vec2(-k.x, k.y), p.xy), 0.f) * vec2(-k.x, k.y);
+
+    // polygon side
+    p.xy -= vec2(clamp(p.x, -k.z * r, k.z * r), r);
+    vec2 d(length(p.xy) * sign(p.y), p.z - h);
+    return min(max(d.x, d.y), 0.f) + length(max(d, 0.f));
+  }
+
+  vec3 pos;
+  float r, h;
+};
+
+struct capsule_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+    vec3 pa = p - a, ba = b - a;
+    float h = clamp(dot(pa, ba) / dot2(ba), 0.f, 1.f);
+    return length(pa - ba * h) - r;
+  }
+
+  vec3 pos;
+  vec3 a;
+  vec3 b;
+  float r;
+};
+
+struct round_cone_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+    vec2 q(length(p.xz), p.y);
+
+    float b = (r1 - r2) / h;
+    float a = sqrt(1 - b * b);
+    float k = dot(q, vec2(-b, a));
+
+    float dist = 0;
+    if(k < 0) 
+      dist = length(q) - r1;
+    else if(k > a * h) 
+      dist = length(q - vec2(0, h)) - r2;
+    else 
+      dist = dot(q, vec2(a, b)) - r1;
+    return dist;
+  }
+
+  vec3 pos;
+  float r1, r2, h;
+};
+
+struct round_cone2_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+
+    // sampling independent computations (only depend on shape)
+    vec3 ba = b - a;
+    float l2 = dot2(ba);
+    float rr = r1 - r2;
+    float a2 = l2 - rr * rr;
+    float il2 = 1 / l2;
+
+    // sampling dependant computations
+    vec3 pa = p - a;
+    float y = dot(pa, ba);
+    float z = y - l2;
+    float x2 = dot2(pa * l2 - ba * y);
+    float y2 = y * y * l2;
+    float z2 = z * z * l2;
+
+    // single square root!
+    float k = sign(rr) * rr * rr * x2;
+
+    float dist = 0;
+    if(sign(z) * a2 * z2 > k)
+      dist = sqrt(x2 + z2) *il2 - r2;
+    else if(sign(y) * a2 * y2 < k)
+      dist = sqrt(x2 + y2) *il2 - r1;
+    else
+      dist = (sqrt(x2 * a2 * il2) + y * rr) * il2 - r1;
+    return dist;
+  }
+
+  vec3 pos;
+  vec3 a, b;
+  float r1, r2;
+};
+
+struct tri_prism_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+
+    const float k = sqrt(3.f);
+    vec2 h2 = h;
+
+    h2.x *= .5f * k;
+    p.xy /= h2.x;
+    p.x = abs(p.x) - 1;
+    p.y = p.y + 1 / k;
+    if(p.x + k * p.y > 0)
+      p.xy = vec2(p.x - k * p.y, -k * p.x - p.y) / 2;
+    p.x -= clamp(p.x, -2.f, 0.f);
+    float d1 = length(p.xy) * sign(-p.y) * h2.x;
+    float d2 = abs(p.z) - h2.y;
+    return length(max(vec2(d1, d2), 0.f)) + min(max(d1, d2), 0.f);
+  }
+
+  vec3 pos;
+  vec2 h;
+};
+
+struct cylinder_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+    vec2 d = abs(vec2(length(p.xz), p.y)) - h;
+    return min(max(d.x, d.y), 0.f) + length(max(d, 0.f));
+  }
+
+  vec3 pos;
+  vec2 h;
+};
+
+struct cylinder2_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+
+    vec3 pa = p - a;
+    vec3 ba = b - a;
+    float baba = dot2(ba);
+    float paba = dot(pa, ba);
+
+    float x = length(pa * baba - ba * paba) - r * baba;
+    float y = abs(paba - baba * .5f) - baba * .5f;
+    float x2 = x * x;
+    float y2 = y * y * baba;
+    float d = max(x, y) < 0 ? 
+      -min(x2, y2) : 
+      (x > 0 ? x2 : 0.f) + (y > 0 ? y2 : 0.f);
+    return sign(d) * sqrt(abs(d)) / baba;
+  }
+
+  vec3 pos;
+  vec3 a, b;
+  float r;
+};
+
+struct cone_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+
+    vec2 q = h * vec2(c.x, -c.y) / c.y;
+    vec2 w(length(p.xz), p.y);
+
+    vec2 a = w - q * clamp(dot(w, q) / dot2(q), 0.f, 1.f);
+    vec2 b = w - q * vec2(clamp(w.x / q.x, 0.f, 1.f), 1.f);
+    float k = sign(q.y);
+    float d = min(dot2(a), dot2(b));
+    float s = max(k * (w.x * q.y - w.y * q.x), k * (w.y - q.y));
+    return sqrt(d) * sign(s);
+  }
+
+  vec3 pos;
+  vec2 c;
+  float h;
+};
+
+struct capped_cone_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+
+    vec2 q(length(p.xz), p.y);
+
+    vec2 k1(r2, h);
+    vec2 k2(r2 - r1, 2 * h);
+    vec2 ca(q.x - min(q.x, q.y < 0 ? r1 : r2), abs(q.y) - h);
+    vec2 cb = q - k1 + k2 * clamp(dot(k1 - q, k2) / dot2(k2), 0.f, 1.f);
+
+    float s = cb.x < 0 & ca.y < 0 ? -1.f : 1.f;
+    return s * sqrt(min(dot2(ca), dot2(cb)));
+  }
+
+  vec3 pos;
+  float h, r1, r2;
+};
+
+struct capped_cone2_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+
+    float rba = rb - ra;
+    float baba = dot2(b - a);
+    float papa = dot2(p - a);
+    float paba = dot(p - a, b - a) / baba;
+
+    float x = sqrt(papa - paba * paba * baba);
+
+    float cax = max(0.f, x - (paba < .5f ? ra : rb));
+    float cay = abs(paba - .5f) - .5f;
+
+    float k = rba * rba + baba;
+    float f = clamp((rba * (x - ra) + paba * baba) / k, 0.f, 1.f);
+
+    float cbx = x - ra - f * rba;
+    float cby = paba - f;
+
+    float s = cbx < 0 & cay < 0 ? -1.f : 1.f;
+    return s * sqrt(min(cax * cax + cay * cay * baba, 
+      cbx * cbx + cby * cby * baba));
+  }
+
+  vec3 pos;
+  vec3 a, b;
+  float ra, rb;
+};
+
+struct solid_angle_t {  
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+    vec2 p2(length(p.xz), p.y);
+    float l = length(p2) - ra;
+    float m = length(p2 - c * clamp(dot(p2, c), 0.f, ra));
+    return max(l, m * sign(c.y * p2.x - c.x * p2.y));
+  }
+
+  vec3 pos;
+  vec2 c;
+  float ra;
+};
+
+struct octahedron_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+
+    p = abs(p);
+    return (p.x + p.y + p.z - s) * 0.57735027f;
+  }
+
+  vec3 pos;
+  float s;
+};
+
+struct pyramid_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+
+    float m2 = sq(h) + .25f;
+
+    // symmetry
+    p.xz = abs(p.xz);
+    p.xz = p.z > p.x ? p.zx : p.xz;
+    p.xz -= .5f;
+
+    // project into face plane (2D)
+    vec3 q(p.z, h * p.y - .5f * p.x, h * p.x + .5f * p.y);
+    float s = max(-q.x, 0.f);
+    float t = clamp((q.y - .5f * p.z) / (m2 + .25f), 0.f, 1.f);
+
+    float a = m2 * (q.x + s) * (q.x + s) + q.y * q.y;
+    float b = m2 * (q.x + .5f * t) * (q.x + .5f * t) + sq(q.y - m2 * t);
+    float d2 = min(q.y, -q.x * m2 - q.y * .5f) > 0 ? 0.f : min(a, b);
+
+    // recover 3D and scale, and add sign
+    return sqrt((d2 + sq(q.z)) / m2) * sign(max(q.z, -p.y));
+  }
+
+  vec3 pos;
+  float h;
+};
+
+struct rhombus_t {
+  float sd(vec3 p) const noexcept {
+    p -= pos;
+
+    p = abs(p);
+    vec2 b(la, lb);
+    float f = clamp((ndot(b, b - 2 * p.xz)) / dot2(b), -1.f, 1.f);
+    vec2 q(
+      length(p.xz - .5f * b * vec2(1 - f, 1 + f)) * 
+        sign(p.x * b.y + p.z * b.x - b.x * b.y) - ra,
+      p.y - h
+    );
+
+    return min(max(q.x, q.y), 0.f) + length(max(q, 0.f));
+  }
+
+  vec3 pos;
+  float la, lb, h, ra;
+};
+
+struct [[
+  .imgui::title="Raymarching - primitives",
+  .imgui::url="https://www.shadertoy.com/view/Xds3zN"
+]] raymarch_prims_t {
+
+  vec2 opU(vec2 d1, vec2 d2) const noexcept {
+    return d1.x < d2.x ? d1 : d2;
+  }
+
+  vec2 map(vec3 pos) const noexcept {
+    vec2 res(1e10, 0);
+
+    res = opU(res, vec2(sphere.sd(pos), 26.9));
+
+    // Row 0
+    res = opU(res, vec2(bounding_box.sd(pos), 16.9));
+    res = opU(res, vec2(torus.sd(pos), 25.0));
+    res = opU(res, vec2(cone.sd(pos), 55));
+    res = opU(res, vec2(capped_cone.sd(pos), 13.67));
+    res = opU(res, vec2(solid_angle.sd(pos), 49.13));
+    
+    // Row 1
+    res = opU(res, vec2(capped_torus.sd(pos), 8.5));
+    res = opU(res, vec2(box.sd(pos), 3.0));
+    res = opU(res, vec2(capsule.sd(pos), 31.9));
+    res = opU(res, vec2(cylinder.sd(pos), 8.0));
+    res = opU(res, vec2(hex_prism.sd(pos), 18.4));
+    
+    // Row 2
+    res = opU(res, vec2(pyramid.sd(pos), 13.56));
+    res = opU(res, vec2(octahedron.sd(pos), 23.56));
+    res = opU(res, vec2(tri_prism.sd(pos), 43.5));
+    res = opU(res, vec2(ellipsoid.sd(pos), 43.17));
+    res = opU(res, vec2(rhombus.sd(pos), 17.0));
+
+    // Row 3
+    res = opU(res, vec2(octagon_prism.sd(pos), 51.8));
+    res = opU(res, vec2(cylinder2.sd(pos), 32.1));
+    res = opU(res, vec2(capped_cone2.sd(pos), 46.1));
+    res = opU(res, vec2(round_cone.sd(pos), 37.0));
+    res = opU(res, vec2(round_cone2.sd(pos), 51.7));
+
+    return res;
+  }
+
+  // http://iquilezles.org/www/articles/boxfunctions/boxfunctions.htm
+  vec2 iBox(vec3 ro, vec3 rd, vec3 rad) const noexcept {
+    vec3 m = 1 / rd;
+    vec3 n = m * ro;
+    vec3 k = abs(m) * rad;
+    vec3 t1 = -n - k;
+    vec3 t2 = -n + k;
+    return vec2(
+      max(max(t1.x, t1.y), t1.z),
+      min(min(t2.x, t2.y), t2.z)
+    );
+  }
+
+  float calcAO(vec3 pos, vec3 nor) const noexcept {
+    float occ = 0.0;
+    float sca = 1.0;
+    for(int i = 0; i < 5; ++i) {
+      float h = 0.01f + 0.12f * i / 4;
+      float d = map(pos + h * nor).x;
+      occ += (h - d) * sca;
+      sca *= 0.95;
+      if(occ > 0.35) 
+        break;
+    }
+    return clamp(1 - 3 * occ, 0.f, 1.f) * (0.5f + 0.5f * nor.y);
+  }
+
+  // http://iquilezles.org/www/articles/checkerfiltering/checkerfiltering.htm
+  float checkersGradBox(vec2 p, vec2 dpdx, vec2 dpdy) const noexcept {
+    // filter kernel
+    vec2 w = abs(dpdx) + abs(dpdy) + 0.001f;
+    // analytical integral (box filter)
+    vec2 i = 2 * (
+      abs(fract((p - 0.5f * w) * 0.5f) - 0.5f) -
+      abs(fract((p + 0.5f * w) * 0.5f) - 0.5f)
+    ) / w;
+
+    // xor pattern
+    return 0.5f - 0.5f * i.x * i.y;                  
+  }
+
+  // http://iquilezles.org/www/articles/rmshadows/rmshadows.htm
+  float calcSoftshadow(vec3 ro, vec3 rd, float tmin, float tmax) const noexcept {
+    // bounding volume
+    float tp = (0.8f - ro.y) / rd.y; 
+    if(tp > 0) tmax = min(tmax, tp);
+
+    float res = 1.0;
+    float t = tmin;
+    for(int i = 0; i < 24; ++i) {
+      float h = map(ro + rd * t).x;
+      float s = clamp(8 * h / t, 0.f, 1.f);
+      res = min(res, s * s * (3 - 2 * s));
+      t += clamp(h, 0.02f, 0.2f);
+      if(res < 0.004f || t > tmax) 
+        break;
+    }
+    return clamp(res, 0.f, 1.f);
+  }
+
+  vec3 calcNormal(vec3 pos) const noexcept {
+    vec2 e = vec2(1, -1) * 0.5773f * 0.0005f;
+    return normalize(
+      e.xyy * map(pos + e.xyy).x + 
+      e.yyx * map(pos + e.yyx).x + 
+      e.yxy * map(pos + e.yxy).x + 
+      e.xxx * map(pos + e.xxx).x
+    );
+  }
+
+  vec2 raycast(vec3 ro, vec3 rd) const noexcept {
+    vec2 res(-1);
+    float tmin = 1;
+    float tmax = 20;
+
+    // raytrace floor plane
+    float tp1 = (0 - ro.y) / rd.y;
+    if(tp1 > 0) {
+      tmax = min(tmax, tp1);
+      res.x = tp1;
+      res.y = 1;
+    }
+
+    // raymarch primitives
+    vec2 tb = iBox(ro - vec3(0, 0.4, -.5), rd, vec3(2.5, 0.41, 3.0));
+    if(tb.x < tb.y & tb.y > 0 & tb.x < tmax) {
+      tmin = max(tb.x, tmin);
+      tmax = max(tb.y, tmax);
+
+      float t = tmin;
+      // Use & as workaround for sturcture CFG bug.
+      for(int i = 0; i < 70 & t < tmax; ++i) {
+        vec2 h = map(ro + rd * t);
+        if(abs(h.x) < .0001f * t) {
+          res = vec2(t, h.y);
+          break;
+        }
+        t += h.x;
+      }
+    }
+    return res;
+  }
+
+  vec3 render(vec3 ro, vec3 rd, vec3 rdx, vec3 rdy) const noexcept {
+    // background
+    vec3 col = vec3(.7, .7, .9) - max(rd.y, 0.f) * .3f;
+
+    // raycast scene
+    vec2 res = raycast(ro, rd);
+    float t = res.x;
+    float m = res.y;
+    if(m > -.5f) {
+      vec3 pos = ro + t * rd;
+      vec3 nor = m < 1.5f ? vec3(0, 1, 0) : calcNormal(pos);
+      vec3 ref = reflect(rd, nor);
+
+      // material
+      col = 0.2f + 0.2f * sin(2 * m + vec3(0, 1, 2));
+      float ks = 1;
+
+      if(m < 1.5f) {
+        // project pixel footprint into the plane
+        vec3 dpdx = ro.y * (rd / rd.y - rdx / rdx.y);
+        vec3 dpdy = ro.y * (rd / rd.y - rdy / rdy.y);
+
+        float f = checkersGradBox(3 * pos.xz, 3 * dpdx.xz, 3 * dpdy.xz);
+        col = .15f + f * vec3(0.05);
+        ks = .4;
+      }
+
+      // lighting
+      float occ = calcAO(pos, nor);
+
+      vec3 lin { };
+
+      // sun
+      {
+        vec3 lig = normalize(vec3(-.5, .4, -.6));
+        vec3 hal = normalize(lig - rd);
+        float dif = clamp(dot(nor, lig), 0.f, 1.f);
+
+        dif *= calcSoftshadow(pos, lig, 0.02, 2.5);
+        float spe = pow(clamp(dot(nor, hal), 0.f, 1.f), 16.f);
+        spe *= dif;
+        spe *= 0.04f + 0.96f * pow(clamp(1 - dot(hal, lig), 0.f, 1.f), 5.f);
+        lin += col * 2.2f * dif * vec3(1.3, 1, 0.7);
+        lin +=       5.0f * spe * vec3(1.3, 1, 0.7) * ks;
+      }
+
+      // sky
+      {
+        float dif = sqrt(clamp(.5f + .5f * nor.y, 0.f, 1.f));
+        dif *= occ;
+        float spe = smoothstep(-.2f, .2f, ref.y);
+        spe *= dif;
+        spe *= 0.04f + 0.96f * pow(clamp(1 + dot(nor, rd), 0.f, 1.f), 5.f);
+        spe *= calcSoftshadow(pos, ref, .02, 2.5);
+        lin += col * 0.6f * dif * vec3(0.4, 0.6, 1.15);
+        lin +=       2.0f * spe * vec3(0.4, 0.6, 1.30) * ks;
+      }
+
+      // back
+      {
+        float dif = clamp(dot(nor, normalize(vec3(0.5, 0.0, 0.6))), 0.f, 1.f) *
+          clamp(1 - pos.y, 0.f, 1.f);
+        dif *= occ;
+        lin += col * 0.55f * dif * vec3(.25, .25, .25);
+      }
+
+      // sss
+      {
+        float dif = pow(clamp(1 + dot(nor, rd), 0.f, 1.f), 2.f);
+        dif *= occ;
+        lin += col * .25f * dif * vec3(1);
+      }
+
+      col = lin;
+      col = mix(col, vec3(0.7, 0.7, 0.9), 1 - exp(-.0001f * t * t * t));
+    }
+
+    return vec3(clamp(col, 0.f, 1.f));
+  }
+
+  mat3 setCamera(vec3 ro, vec3 ta, float cr) const noexcept {
+    vec3 cw = normalize(ta - ro);
+    vec3 cp = vec3(sin(cr), cos(cr), 0);
+    vec3 cu = normalize( cross(cw,cp) );
+    vec3 cv =          ( cross(cu,cw) );
+    return mat3( cu, cv, cw );
+  }
+
+
+  vec4 render(vec2 frag_coord, shadertoy_uniforms_t u) {
+    vec2 mo = u.mouse.xy / u.resolution.xy;
+    float time = 32 + u.time * 1.5f;
+
+    // Camera.
+    vec3 ta(.5, -.5, -.6);
+    vec3 ro = ta + vec3(
+      4.5f * cos(.1f * time + 7 * mo.x),
+      1.3f + 2 * mo.y,
+      4.5f * sin(.1f * time + 7 * mo.x)
+    );
+    mat3 ca = setCamera(ro, ta, 0);
+
+    vec3 tot { };
+
+    // TODO: MSAA here.
+
+    vec2 p = (2 * frag_coord - u.resolution.xy) / u.resolution.y;
+
+    // ray direction.
+    vec3 rd = ca * normalize(vec3(p, 2.5));
+
+    // ray differentials.
+    vec2 px = (2 * (frag_coord + vec2(1, 0)) - u.resolution.xy) / u.resolution.y;
+    vec2 py = (2 * (frag_coord + vec2(0, 1)) - u.resolution.xy) / u.resolution.y;
+    vec3 rdx = ca * normalize(vec3(px, 2.5f));
+    vec3 rdy = ca * normalize(vec3(py, 2.5f));
+
+    // render
+    vec3 col = render(ro, rd, rdx, rdy);
+
+    col = pow(col, vec3(0.4545));
+    tot += col;
+
+    return vec4(tot, 1);
+  }
+
+  sphere_t sphere = { vec3(-2.0, 0.25, 0.0), .25 };
+
+  // Row 0.
+  torus_t        torus          = { vec3( 0, 0.30,  1), vec2(.25, .05) };
+  bounding_box_t bounding_box   = { vec3( 0, 0.25,  0), vec3(.3, .25, .2), .025 };
+  cone_t         cone           = { vec3( 0, 0.45, -1), vec2(.6, .8), .45f };
+  capped_cone_t  capped_cone    = { vec3( 0, 0.25, -2), .25f, .25f, .1f };
+  solid_angle_t  solid_angle    = { vec3( 0, 0.00, -3), vec2(3, 4) / 5, 0.4f };
+   
+  // Row 1.   
+  capped_torus_t capped_torus   = { vec3( 1, 0.30,  1), vec2(.866025, -.5), .25f, .05f };
+  box_t          box            = { vec3( 1, 0.25,  0), vec3(.3, .25, .1) };
+  capsule_t      capsule        = { vec3( 1, 0.00, -1), vec3(-.1, .1, -.1), vec3(0.2, .4, .2), .1 };
+  cylinder_t     cylinder       = { vec3( 1, 0.25, -2), vec2(.15, .25) };
+  hex_prism_t    hex_prism      = { vec3( 1, 0.20, -3), vec2(.2, .05) };
+   
+  // Row 2.  
+  pyramid_t      pyramid        = { vec3(-1, -0.6, -3), 1.f };
+  octahedron_t   octahedron     = { vec3(-1, 0.35, -2), .35f };
+  tri_prism_t    tri_prism      = { vec3(-1, 0.15, -1), vec2(.3, .05) };
+  ellipsoid_t    ellipsoid      = { vec3(-1, 0.25,  0), vec3(.2, .25, .05) };
+  rhombus_t      rhombus        = { vec3(-1, 0.34,  1), .15f, .25f, .04f, .08f };
+
+  // Row 3.
+  octagon_prism_t octagon_prism = { vec3( 2, 0.20, -3), 0.2f, 0.05f };
+  cylinder2_t     cylinder2     = { vec3( 2, 0.15, -2), vec3(.1, -.1, 0), vec3(-.2, .35, .1), .08f };
+  capped_cone2_t  capped_cone2  = { vec3( 2, 0.10, -1), vec3(.1, 0, 0), vec3(-.2, .4, .1), .15f, .05f };
+  round_cone_t    round_cone    = { vec3( 2, 0.15,  1), .2f, .1f, .3f };
+  round_cone2_t   round_cone2   = { vec3( 2, 0.15,  0), vec3(.1, 0, 0), vec3(-.1, .35, .1), .15f, .05f };
+
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1458,6 +2176,7 @@ enum typename class shader_program_t {
     std::pair<sphere_tracer_t, segment_tracer_t>, 
     blobs_t
   >,
+  Raymarcher = raymarch_prims_t,
   band_limited1_t,
   band_limited2_t,
 };
