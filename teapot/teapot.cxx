@@ -3,6 +3,13 @@
 #include "teapot.h"
 #include <vector>
 
+inline float point_segment_distance(vec3 p, vec3 a, vec3 b) {
+  b -= a;
+  float t = dot(p - a, b) / dot(b, b);
+  t = clamp(t, 0.f, 1.f);
+  return distance(p, a + t * b);
+}
+
 [[using spirv: in, location(0)]]
 vec4 vert_pos_in;
 
@@ -20,13 +27,6 @@ struct tess_constant_t {
     return level;
   }
 };
-
-inline float point_segment_distance(vec3 p, vec3 a, vec3 b) {
-  b -= a;
-  float t = dot(p - a, b) / dot(b, b);
-  t = clamp(t, 0.f, 1.f);
-  return distance(p, a + t * b);
-}
 
 struct tess_distance_t {
   vec3 camera_pos;
