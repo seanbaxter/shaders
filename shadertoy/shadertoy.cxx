@@ -1862,7 +1862,7 @@ struct [[
     // Row 0
     res = opU(res, vec2(bounding_box.sd(pos), 16.9));
     res = opU(res, vec2(torus.sd(pos), 25.0));
-    res = opU(res, vec2(cone.sd(pos), 55));
+    res = opU(res, vec2(cone.sd(pos), 55.0));
     res = opU(res, vec2(capped_cone.sd(pos), 13.67));
     res = opU(res, vec2(solid_angle.sd(pos), 49.13));
     
@@ -2672,10 +2672,6 @@ bool app_t::configure() {
   // Produce a combo box with all shader options.
   ImGui::Begin("Shader parameters");
 
-  //char text[20];
-  //sprintf(text, "%8.2f seconds", uniforms.time);
-
-  // ImGui::Text(text);
   ImGui::DragFloat("Time", &uniforms.time, .1);
   ImGui::SliderFloat("Speed", &speed, 0, 5);
 
