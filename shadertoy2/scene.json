@@ -1,0 +1,80 @@
+{
+  "scenes": [
+    {
+      "name" : "spheres of many sizes",
+      "objects" : [
+        {
+          "name"     : "tiny",
+          "type"     : "sphere_t",
+          "pos"      : [ -2.5, 0.1, 0.0 ],
+          "s"        : 0.1,
+          "material" : 0.0
+        }, {
+          "name"     : "small",
+          "type"     : "sphere_t",
+          "pos"      : [ -2, 0.3, 0.0 ],
+          "s"        : 0.3,
+          "material" : 1.0
+        }, {
+          "name"     : "medium",
+          "type"     : "sphere_t",
+          "pos"      : [ -1, 0.5, 0.0 ],
+          "s"        : 0.5,
+          "material" : 2.0
+        }, {
+          "name"     : "large",
+          "type"     : "sphere_t",
+          "pos"      : [ 0.5, 0.75, 0.0 ],
+          "s"        : 0.75,
+          "material" : 3.0
+        }, {
+          "name"     : "jumbo",
+          "type"     : "sphere_t",
+          "pos"      : [ 2.5, 1.0, 0.0 ],
+          "s"        : 1.0,
+          "material" : 4.0
+        }
+      ]
+    }, {
+      "name" : "temple",
+      "objects" : [
+        {
+          "name"       : "center",
+          "type"       : "bounding_box_t",
+          "pos"        : [ 0, 0.3, 0 ],
+          "b"          : [ 0.3, 0.3, 0.3 ],
+          "e"          : 0.05,
+          "material"   : 3.14
+        },
+        {
+          "name"       : "pyramid_0",
+          "type"       : "pyramid_t",
+          "pos"        : [ -1, 0, 1 ],
+          "h"          : 0.6,
+          "material"   : 1.2
+        },
+        {
+          "name"       : "pyramid_1",
+          "type"       : "pyramid_t",
+          "pos"        : [ 1, 0, 1 ],
+          "h"          : 0.6,
+          "material"   : 1.2
+        },
+        {
+          "name"       : "pyramid_2",
+          "type"       : "pyramid_t",
+          "pos"        : [ 1, 0, -1 ],
+          "h"          : 0.6,
+          "material"   : 1.2
+        },
+        {
+          "name"       : "pyramid_3",
+          "type"       : "pyramid_t",
+          "pos"        : [ -1, 0, -1 ],
+          "h"          : 0.6,
+          "material"   : 1.2
+        }
+      ]
+    }
+  ]
+}

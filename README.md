@@ -61,6 +61,7 @@
     * [Shader programming with composition](#shader-programming-with-composition)
     * [Unified CPU and GPU rendering and CPU debugging](#unified-cpu-and-gpu-rendering-and-cpu-debugging)
     * [if-codegen statements](#if-codegen-statements)
+    * [Configuring a shader from JSON](#configuring-a-shader-from-json)
 
 1. [Compiled sprites with compile-time PNG decoding](#compiled-sprites-with-compile-time-png-decoding)
    
@@ -1960,6 +1961,249 @@ The builtin variable `__is_spirv_target` has unknown value when the parser is ru
 ```
 
 The _if-codegen_ statement is illustrated by inserting some color component swaps in the egg shader. This is very similar to the _if-constexpr_ mechanism, in that it prunes branches at compile time to protect targets from ODR exposure to code they can't compile. However, the predicate is resolved after parsing or template instantiation and at codegen time. You can use this section to include logging code and debugging code, or choose special features that are only available for shaders.
+
+### Configuring a shader from JSON
+
+![raymarcher2](images/raymarcher2.png)
+
+The shadertoy demo includes a C++ port of [iq](https://twitter.com/iquilezles)'s classic [SDF solids raymarcher](https://www.shadertoy.com/view/Xds3zN). The original GLSL code includes SDFs for each of the 21 solids as global functions, and the caller passes all shape parameters in. Circle C++ shaders factors each SDF into its own C++ class, encapsulating the shape's parameters (eg length, radius) and the logic for computing the signed distance. By making these data members of the shader's function object, they're automatically aggregated into the program's uniform buffer object and an ImGui to fully control this parameterization is generated automatically.
+
+This is a more complex shader, but it's really no different from the others in this sample. We can, however, use Circle's compile-time execution capability to further abstract the rendering algorithm from the scene definition.
+
+Consider using a configuration language like JSON or Wavefront .obj to define scene geometry. These formats are both human readable and machine readable, with reliable libraries available for every major programming language. By adopting an interchange format as a source of scene definitions, we add the ability for special tooling to configure a shader.
+
+![spheres](images/spheres_many_sizes.png)
+![temple](images/temple.png)
+
+[scene.json](shadertoy2/scene.json)
+```json
+{
+  "scenes": [
+    {
+      "name" : "spheres of many sizes",
+      "objects" : [
+        {
+          "name"     : "tiny",
+          "type"     : "sphere_t",
+          "pos"      : [ -2.5, 0.1, 0.0 ],
+          "s"        : 0.1,
+          "material" : 0.0
+        }, {
+          "name"     : "small",
+          "type"     : "sphere_t",
+          "pos"      : [ -2, 0.3, 0.0 ],
+          "s"        : 0.3,
+          "material" : 1.0
+        }, {
+          "name"     : "medium",
+          "type"     : "sphere_t",
+          "pos"      : [ -1, 0.5, 0.0 ],
+          "s"        : 0.5,
+          "material" : 2.0
+        }, {
+          "name"     : "large",
+          "type"     : "sphere_t",
+          "pos"      : [ 0.5, 0.75, 0.0 ],
+          "s"        : 0.75,
+          "material" : 3.0
+        }, {
+          "name"     : "jumbo",
+          "type"     : "sphere_t",
+          "pos"      : [ 2.5, 1.0, 0.0 ],
+          "s"        : 1.0,
+          "material" : 4.0
+        }
+      ]
+    }, {
+      "name" : "temple",
+      "objects" : [
+        {
+          "name"       : "center",
+          "type"       : "bounding_box_t",
+          "pos"        : [ 0, 0.3, 0 ],
+          "b"          : [ 0.3, 0.3, 0.3 ],
+          "e"          : 0.05,
+          "material"   : 3.14
+        },
+        {
+          "name"       : "pyramid_0",
+          "type"       : "pyramid_t",
+          "pos"        : [ -1, 0, 1 ],
+          "h"          : 0.6,
+          "material"   : 1.2
+        },
+        {
+          "name"       : "pyramid_1",
+          "type"       : "pyramid_t",
+          "pos"        : [ 1, 0, 1 ],
+          "h"          : 0.6,
+          "material"   : 1.2
+        },
+        {
+          "name"       : "pyramid_2",
+          "type"       : "pyramid_t",
+          "pos"        : [ 1, 0, -1 ],
+          "h"          : 0.6,
+          "material"   : 1.2
+        },
+        {
+          "name"       : "pyramid_3",
+          "type"       : "pyramid_t",
+          "pos"        : [ -1, 0, -1 ],
+          "h"          : 0.6,
+          "material"   : 1.2
+        }
+      ]
+    }
+  ]
+}
+```
+
+The "spheres of many sizes" and "temple" scenes are defined in a JSON file. In order to create a shader that generates these signed distance fields, the JSON file must be parsed at compile time. Although the specific parameter values can be adjusted at runtime, the shader must know which shape types contribute to the SDF to generate code for them.
+
+The `shadertoy2` project is a fork of `shadertoy` that only features the SDF solids raymarcher, but has three different scenes: one is defined directly in C++ and the other two in JSON.
+
+[shadertoy2.cxx](shadertoy2/shadertoy2.cxx)
+```cpp
+
+template<typename scene_t>
+struct [[
+  .imgui::title=@attribute(scene_t, imgui::title),
+  .imgui::url="https://www.shadertoy.com/view/Xds3zN"
+]] raymarch_prims_t {
+
+  vec2 map(vec3 pos) const noexcept {
+    vec2 res(1e10, 0);
+
+    // Ray cast over all scene objects.
+    @meta for(int i = 0; i < @member_count(scene_t); ++i) {
+      res = opU(res, vec2(
+        scene.@member_value(i).sdf.sd(pos), 
+        scene.@member_value(i).material / 2 + 1.5f
+      ));
+    }
+
+    return res;
+  }
+
+  ...
+
+  scene_t scene;
+};
+```
+
+The raymarcher function object becomes a class template, parameterized over a `scene_t` type. `raymarch_prims_t` has one instance of this as a member object. We can no longer name the shape members directly, because they're specified by the JSON asset. Instead, reflection is used to visit all the shape subobjects of the `scene` data member.
+
+```cpp
+// Load a class object consisting of class objects, vectors and scalars from
+// a JSON.
+template<typename obj_t>
+obj_t load_from_json(std::string name, nlohmann::json& j) {
+  obj_t obj { };
+
+  if(j.is_null()) {
+    fprintf(stderr, "no JSON item for %s\n", name.c_str());
+    exit(1);
+  }
+
+  if constexpr(std::is_class_v<obj_t>) {
+    // Read any class type.
+    check(j.is_object(), name, "expected object type");
+    @meta for(int i = 0; i < @member_count(obj_t); ++i)
+      obj.@member_value(i) = load_from_json<@member_type(obj_t, i)>(
+        name + "." + @member_name(obj_t, i),
+        j[@member_name(obj_t, i)]
+      );
+
+  } else if constexpr(__is_vector(obj_t)) {
+    static_assert(std::is_same_v<float, __underlying_type(obj_t)>);
+    constexpr int size = __vector_size(obj_t);
+
+    check(j.is_array(), name, "expected array type");
+    check(j.size() == size, name, 
+      "expected " + std::to_string(size) + " array elements");
+
+    for(int i = 0; i < size; ++i) {
+      obj[i] = load_from_json<__underlying_type(obj_t)>(
+        name + "[" + std::to_string(i) + "]",
+        j[i]
+      );
+    }
+
+  } else {
+    static_assert(std::is_integral_v<obj_t> || std::is_floating_point_v<obj_t>);
+    check(j.is_number(), name, "expected number type");
+    obj = j;
+  }
+  return obj;
+}
+```
+
+This utility function populates the values of an object from a JSON file using the super popular [json.hpp](https://github.com/nlohmann/json) header-only library. In this simple implementation, I support objects, vectors of any size, and scalar values. This covers the definitions for all the SDF shape classes. Circle being Circle, we can execute this function at runtime (of course) _or at compile time_. Since [scene.json](shadertoy2/scene.json) is parsed at compile time, this funtion gets executed by the compiler's integrated interpreter.
+
+```cpp
+@meta nlohmann::json scene_json;
+
+template<int scene_index>
+struct [[
+  .imgui::title=@string(scene_json[scene_index]["name"])
+]] json_scene_t {
+
+  // Declare the data members.
+  @meta for(auto& object : scene_json[scene_index]["objects"])
+    shape_t<@type_id(object["type"])> @(object["name"]);
+
+  json_scene_t() {
+    // Initialize each data member from its json.
+    @meta for(int i = 0; i < @member_count(json_scene_t); ++i) {{
+      auto& member = this->@member_value(i);
+
+      // Set the sdf subobject.
+      member.sdf = (@meta load_from_json<decltype(member.sdf)>(
+        @member_name(json_scene_t, i),
+        scene_json[scene_index]["objects"][i]
+      ));
+
+      // Set the material.
+      member.material = scene_json[scene_index]["objects"][i]["material"];
+    }}
+  }
+};
+
+@meta+ {
+  std::ifstream i("scene.json");
+  if(!i.is_open()) {
+    fprintf(stderr, "cannot open scene file scene.json\n");
+    exit(1);
+  }
+
+  i>> scene_json;
+  scene_json = scene_json["scenes"];
+
+  printf("scene.json loaded %zu scenes\n", scene_json.size());
+}
+
+enum typename class shader_program_t {
+  raymarch_prims_t<basic_scene_t>;
+
+  @meta for(int i = 0; i < scene_json.size(); ++i)
+    raymarch_prims_t<json_scene_t<i> >;
+};
+```
+
+This code opens the JSON file and stores its handle in the global meta object `scene_json`. All code inside the `@meta+` compound statement is executed at compile time. This is the so-called "sticky meta", and it applies recursively to all scopes. It's a syntactic convenience so you don't have to write the `@meta` keyword before every statement. Note that the `printf` diagnostic on success, and the `fprintf` diagnostic on failure, both occur at compile time due to their location within the meta context.
+
+The typed enum `shader_program_t` includes a compile-time loop that iterates over each element in the "scenes" array in the parsed JSON. It specializes the `json_scene_t` class template over each index. 
+
+`json_scene_t` interacts with the JSON in three places:
+1. The _title_ attribute accesses the "name" member of the scene in the JSON. Since the json.hpp library returns an std::string with an expiring storage, the lifetime of the title string is extended with the `@string` Circle extension, which transforms the `std::string` to a string literal. 
+2. The "name" and "type" values for each element in the "objects" array are used to declare data members. 
+```cpp
+  @meta for(auto& object : scene_json[scene_index]["objects"])
+    shape_t<@type_id(object["type"])> @(object["name"]);
+```
+    The `@type_id` Circle extension takes a string name of a type and yields the actual type. Ordinary name lookup is used here. If the "type" JSON value is "shape_t", then the construct yields a `shape_t` type. The `@()` construct is a Circle dynamic name. It converts the argument string to an identifier. The argument string must have valid spelling. (i.e., not spaces, starts with an alpha or underscore.) Since the inner-most enclosing non-meta scope is the class template `json_scence_t`, this loop body is interpreted as a member declaration.
+3. The constructor sets the values of all shape objects to those specified in the JSON. Since member function bodies are parsed after the class definition, all data members have already been defined, so we can use reflection to loop over them. The `@member_value()` Circle extension yields an lvalue to the i'th member of the class object expression on the left-hand side. The `sdf` subobject is initialized with the result of `load_from_json`, which gets passed the json.hpp object encapsulating this shape's data in the scene file. Note the `@meta` keyword that begins the initializer expression. This puts the compiler into the meta context, so that the subsequent expression is evaluated at compile time. This is important, because the json file was opened at compile time and is not available for runtime queries.
 
 ## Compiled sprites with compile-time PNG decoding
 
