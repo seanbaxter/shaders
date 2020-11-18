@@ -2155,18 +2155,18 @@ struct [[
 
   json_scene_t() {
     // Initialize each data member from its json.
-    @meta for(int i = 0; i < @member_count(json_scene_t); ++i) {{
-      auto& member = this->@member_value(i);
-
+    @meta for(int i = 0; i < @member_count(json_scene_t); ++i) {
       // Set the sdf subobject.
-      member.sdf = (@meta load_from_json<decltype(member.sdf)>(
-        @member_name(json_scene_t, i),
-        scene_json[scene_index]["objects"][i]
-      ));
+      this->@member_value(i).sdf = 
+        (@meta load_from_json<decltype(this->@member_value(i).sdf)>(
+          @member_name(json_scene_t, i),
+          scene_json[scene_index]["objects"][i]
+        ));
 
       // Set the material.
-      member.material = scene_json[scene_index]["objects"][i]["material"];
-    }}
+      this->@member_value(i).material = 
+        scene_json[scene_index]["objects"][i]["material"];
+    }
   }
 };
 

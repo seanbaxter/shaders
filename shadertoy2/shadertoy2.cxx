@@ -1,5 +1,5 @@
-#if __circle_build__ < 104
-#error "Circle build 104 required to reliably compile this sample"
+#if __circle_build__ < 105
+#error "Circle build 105 required to reliably compile this sample"
 #endif
 
 #include <imgui.h>
@@ -608,7 +608,66 @@ struct shape_t {
   float material;
 };
 
-template<typename scene_t>
+////////////////////////////////////////////////////////////////////////////////
+// Load an object from json.
+
+inline void check(bool valid, const std::string& name, 
+  const std::string error) {
+
+  if(!valid) {
+    fprintf(stderr, "%s: %s\n", name.c_str(), error.c_str());
+    exit(1);
+  }
+}
+
+// Load a class object consisting of class objects, vectors and scalars from
+// a JSON.
+template<typename obj_t>
+obj_t load_from_json(std::string name, nlohmann::json& j) {
+  obj_t obj { };
+
+  if(j.is_null()) {
+    fprintf(stderr, "no JSON item for %s\n", name.c_str());
+    exit(1);
+  }
+
+  if constexpr(std::is_class_v<obj_t>) {
+    // Read any class type.
+    check(j.is_object(), name, "expected object type");
+    @meta for(int i = 0; i < @member_count(obj_t); ++i)
+      obj.@member_value(i) = load_from_json<@member_type(obj_t, i)>(
+        name + "." + @member_name(obj_t, i),
+        j[@member_name(obj_t, i)]
+      );
+
+  } else if constexpr(__is_vector(obj_t)) {
+    static_assert(std::is_same_v<float, __underlying_type(obj_t)>);
+    constexpr int size = __vector_size(obj_t);
+
+    check(j.is_array(), name, "expected array type");
+    check(j.size() == size, name, 
+      "expected " + std::to_string(size) + " array elements");
+
+    for(int i = 0; i < size; ++i) {
+      obj[i] = load_from_json<__underlying_type(obj_t)>(
+        name + "[" + std::to_string(i) + "]",
+        j[i]
+      );
+    }
+
+  } else {
+    static_assert(std::is_integral_v<obj_t> || std::is_floating_point_v<obj_t>);
+    check(j.is_number(), name, "expected number type");
+    obj = j;
+  }
+  return obj;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+@meta nlohmann::json scene_json;
+
+template<typename scene_t, bool inline_scene = false>
 struct [[
   .imgui::title=@attribute(scene_t, imgui::title),
   .imgui::url="https://www.shadertoy.com/view/Xds3zN"
@@ -621,14 +680,26 @@ struct [[
   vec2 map(vec3 pos) const noexcept {
     vec2 res(1e10, 0);
 
-    // Ray cast over all scene objects.
-    @meta for(int i = 0; i < @member_count(scene_t); ++i) {
-      res = opU(res, vec2(
-        scene.@member_value(i).sdf.sd(pos), 
-        scene.@member_value(i).material / 2 + 1.5f
-      ));
-    }
+    if constexpr(inline_scene) {
+      // Create a scene object that's an automatic variable. It's not a 
+      // member of this class so won't be bound to the UBO.
+      scene_t scene;
+      @meta for(int i = 0; i < @member_count(scene_t); ++i) {
+        res = opU(res, vec2(
+          scene.@member_value(i).sdf.sd(pos), 
+          scene.@member_value(i).material / 2 + 1.5f
+        ));
+      }
 
+    } else {
+      // Raymarch on the scene member object.
+      @meta for(int i = 0; i < @member_count(scene_t); ++i) {
+        res = opU(res, vec2(
+          scene.@member_value(i).sdf.sd(pos), 
+          scene.@member_value(i).material / 2 + 1.5f
+        ));
+      }
+    }
     return res;
   }
 
@@ -686,7 +757,7 @@ struct [[
       float s = clamp(8 * h / t, 0.f, 1.f);
       res = min(res, s * s * (3 - 2 * s));
       t += clamp(h, 0.02f, 0.2f);
-      if(res < 0.004f || t > tmax) 
+      if(res < 0.004f | t > tmax) 
         break;
     }
     return clamp(res, 0.f, 1.f);
@@ -857,7 +928,9 @@ struct [[
   }
 
   float distance = 5;
-  scene_t scene;
+
+  @meta if(!inline_scene)
+    scene_t scene;
 };
 
 struct [[
@@ -894,64 +967,10 @@ struct [[
   shape_t<round_cone2_t>   round_cone2   = { vec3( 2, 0.15,  0), vec3(.1, 0, 0), vec3(-.1, .35, .1), .15f, .05f, 51.7f };
 };
 
-inline void check(bool valid, const std::string& name, 
-  const std::string error) {
-
-  if(!valid) {
-    fprintf(stderr, "%s: %s\n", name.c_str(), error.c_str());
-    exit(1);
-  }
-}
-
-// Load a class object consisting of class objects, vectors and scalars from
-// a JSON.
-template<typename obj_t>
-obj_t load_from_json(std::string name, nlohmann::json& j) {
-  obj_t obj { };
-
-  if(j.is_null()) {
-    fprintf(stderr, "no JSON item for %s\n", name.c_str());
-    exit(1);
-  }
-
-  if constexpr(std::is_class_v<obj_t>) {
-    // Read any class type.
-    check(j.is_object(), name, "expected object type");
-    @meta for(int i = 0; i < @member_count(obj_t); ++i)
-      obj.@member_value(i) = load_from_json<@member_type(obj_t, i)>(
-        name + "." + @member_name(obj_t, i),
-        j[@member_name(obj_t, i)]
-      );
-
-  } else if constexpr(__is_vector(obj_t)) {
-    static_assert(std::is_same_v<float, __underlying_type(obj_t)>);
-    constexpr int size = __vector_size(obj_t);
-
-    check(j.is_array(), name, "expected array type");
-    check(j.size() == size, name, 
-      "expected " + std::to_string(size) + " array elements");
-
-    for(int i = 0; i < size; ++i) {
-      obj[i] = load_from_json<__underlying_type(obj_t)>(
-        name + "[" + std::to_string(i) + "]",
-        j[i]
-      );
-    }
-
-  } else {
-    static_assert(std::is_integral_v<obj_t> || std::is_floating_point_v<obj_t>);
-    check(j.is_number(), name, "expected number type");
-    obj = j;
-  }
-  return obj;
-}
-
-@meta nlohmann::json scene_json;
-
 template<int scene_index>
 struct [[
   .imgui::title=@string(scene_json[scene_index]["name"])
-]] json_scene_t {
+]] json_scene_t { 
 
   // Declare the data members.
   @meta for(auto& object : scene_json[scene_index]["objects"])
@@ -959,18 +978,18 @@ struct [[
 
   json_scene_t() {
     // Initialize each data member from its json.
-    @meta for(int i = 0; i < @member_count(json_scene_t); ++i) {{
-      auto& member = this->@member_value(i);
-
+    @meta for(int i = 0; i < @member_count(json_scene_t); ++i) {
       // Set the sdf subobject.
-      member.sdf = (@meta load_from_json<decltype(member.sdf)>(
-        @member_name(json_scene_t, i),
-        scene_json[scene_index]["objects"][i]
-      ));
+      this->@member_value(i).sdf = 
+        (@meta load_from_json<decltype(this->@member_value(i).sdf)>(
+          @member_name(json_scene_t, i),
+          scene_json[scene_index]["objects"][i]
+        ));
 
       // Set the material.
-      member.material = scene_json[scene_index]["objects"][i]["material"];
-    }}
+      this->@member_value(i).material = 
+        scene_json[scene_index]["objects"][i]["material"];
+    }
   }
 };
 
@@ -992,8 +1011,10 @@ struct [[
 enum typename class shader_program_t {
   raymarch_prims_t<basic_scene_t>;
 
-  @meta for(int i = 0; i < scene_json.size(); ++i)
-    raymarch_prims_t<json_scene_t<i> >;
+  @meta for(int i = 0; i < scene_json.size(); ++i) {
+    raymarch_prims_t<json_scene_t<i>, false>;
+    raymarch_prims_t<json_scene_t<i>, true>;
+  }
 };
 
 
