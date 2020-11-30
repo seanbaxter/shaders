@@ -1944,7 +1944,7 @@ struct [[
       float s = clamp(8 * h / t, 0.f, 1.f);
       res = min(res, s * s * (3 - 2 * s));
       t += clamp(h, 0.02f, 0.2f);
-      if(res < 0.004f || t > tmax) 
+      if(res < 0.004f | t > tmax) 
         break;
     }
     return clamp(res, 0.f, 1.f);
@@ -2093,6 +2093,7 @@ struct [[
       1.3f + 2 * mo.y,
       4.5f * sin(.1f * time + 7 * mo.x)
     );
+    ro = normalize(ro) * distance;
     mat3 ca = setCamera(ro, ta, 0);
 
     vec3 tot { };
@@ -2119,6 +2120,8 @@ struct [[
     return vec4(tot, 1);
   }
 
+  float distance = 5;
+  
   sphere_t sphere = { vec3(-2.0, 0.25, 0.0), .25 };
 
   // Row 0.
