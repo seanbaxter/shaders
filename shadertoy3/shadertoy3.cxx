@@ -219,8 +219,8 @@ void frag_main() {
 
 // Create constexpr arrays for the weights and biases.
 // NOTE: Extend Circle to allow sourcing directly on std::vector.
-const float weights[] = @array(weights_vector.data(), weights_vector.size());
-const float biases[] = @array(biases_vector.data(), biases_vector.size());
+constexpr float weights[] = @array(weights_vector.data(), weights_vector.size());
+constexpr float biases[] = @array(biases_vector.data(), biases_vector.size());
 
 constexpr const char* titles[] {
   "Neural SDF - Private weights",
