@@ -207,7 +207,7 @@ struct [[
 
   vec3 hash32(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973));
-    p3 += dot(p3, p3.yxz+19.19);
+    p3 += dot(p3, p3.yxz+19.19f);
     return fract((p3.xxy+p3.yzz)*p3.zyx);
   }
 
@@ -222,7 +222,7 @@ struct [[
     if(r > 0) {
       vec2 uv2 = rot(uv, a);
       float yolk = sdShape(11 / sqrt(2.f) * uv2, r);
-      float white = sdShape(5.2 / sqrt(2.f) * uv2, r);
+      float white = sdShape(5.2f / sqrt(2.f) * uv2, r);
       sd = vec2(opUnion(sd.x, white), opUnion(sd.y, yolk));
     }
     return sd;
