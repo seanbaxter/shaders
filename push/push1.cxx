@@ -1,3 +1,7 @@
+#if __circle_build__ < 108
+#error "Circle build 108 required"
+#endif
+
 [[using spirv: buffer, binding(0)]]
 mat4 x[];
 
