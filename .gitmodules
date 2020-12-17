@@ -11,3 +11,6 @@
 	path = RayTracingInVulkan
 	url = git@github.com:seanbaxter/RayTracingInVulkan
 	branch = circle
+[submodule "mgpu-shaders"]
+	path = mgpu-shaders
+	url = git@github.com:seanbaxter/mgpu-shaders
