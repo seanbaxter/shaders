@@ -36,6 +36,14 @@ template<auto index, typename type_t = @enum_type(index)>
 type_t shader_buffer;
 
 template<auto index, typename type_t = @enum_type(index)>
+[[using spirv: buffer, readonly, binding((int)index)]]
+type_t shader_readonly;
+
+template<auto index, typename type_t = @enum_type(index)>
+[[using spirv: buffer, writeonly, binding((int)index)]]
+type_t shader_writeonly;
+
+template<auto index, typename type_t = @enum_type(index)>
 [[using spirv: uniform, location((int)index)]]
 type_t shader_uniform;
 

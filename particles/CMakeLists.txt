@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.9)
 project(particles)
 
-include_directories(../../inc)
+include_directories(../mgpu-shaders/inc)
 
 set(SOURCE_FILES
   particles.cxx

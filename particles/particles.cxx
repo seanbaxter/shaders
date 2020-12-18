@@ -1,33 +1,49 @@
 #include <mgpu/kernel_mergesort.hxx>
-#include <mgpu/app.hxx>
+#include <memory>
+#include "../include/appglfw.hxx"
 
 using mgpu::gl_buffer_t;
 
-// TODO: Only put simulation params here.
-
-// simulation parameters
+// Simulation parameters are stored in host memory in system_t kept in UBO 1
+// to support shaders.
 struct SimParams {
-  vec3  colliderPos;
-  float colliderRadius;
+  // Particle characteristics.
+  int   numBodies         = 16384;
+  float particleRadius    = 1.f / 64;
 
-  vec3  gravity;
-  float globalDamping;
-  float particleRadius;
+  // Particle distribution.
+  ivec3 gridSize          = ivec3(64, 64, 64);
+  vec3  worldOrigin       = vec3(-1, -1, -1);
+  vec3  cellSize          = 2 * particleRadius;
 
-  ivec3 gridSize;
-  int   numCells;
-  vec3  worldOrigin;
-  vec3  cellSize;
+  // Integration.
+  vec3  gravity           = vec3(0, -.0003, 0);
+  float deltaTime         = 0.5f;
+  float globalDamping     = 1;
 
-  int   numBodies;
+  // Physics.
+  float spring            = 0.5f;
+  float damping           = 0.02f;
+  float shear             = 0.1f;
+  float attraction        = 0;
+  float boundaryDamping   = -0.5f;
 
-  float deltaTime;
-  float spring;
-  float damping;
-  float shear;
-  float attraction;
-  float boundaryDamping;
+  // The wrecking ball.
+  vec3  colliderPos       = vec3(-1.2, -0.8, 0.8);
+  float colliderRadius    = 0.2f;
+
+  // Rendering parameters.
+  mat4 view               = mat4();
+  mat4 proj               = mat4();
+  float pointScale        = 0;
+  float pointRadius       = 0.0625f;
+  float fov               = radians(60.0f);
 };
+
+// Park the simulation parameters at ubo 1 and keep it there throughout the
+// frame. UBO 0 is reserved for gl_transform.
+[[using spirv: uniform, binding(1)]]
+SimParams sim_params_ubo;
 
 inline vec3 collide_spheres(vec3 posA, vec3 posB, vec3 velA, vec3 velB,
   float radiusA, float radiusB, const SimParams& params) {
@@ -65,17 +81,35 @@ inline vec3 collide_spheres(vec3 posA, vec3 posB, vec3 velA, vec3 velB,
 inline ivec3 calcGridPos(vec3 p, const SimParams& params) {
   return (ivec3)floor((p - params.worldOrigin) / params.cellSize);
 }
+
 inline int hashGridPos(ivec3 p, const SimParams& params) {
   p &= params.gridSize - 1;
   return p.x + params.gridSize.x * (p.y + params.gridSize.y * p.z);
 }
 
 struct system_t {
+  system_t(const SimParams& params);
+  ~system_t();
+  
+  void reset();
+  void init_grid(ivec3 size, float spacing, float jitter);
+
+  // void add_sphere(int start, float* pos, float* vel, int r, float spacing);
+
+  void update(float deltaTime);
+  void collide();
+  void integrate();
+  void sort_particles();
+
+  const SimParams& params;
+
   gl_buffer_t<vec4[]> positions;
   gl_buffer_t<vec4[]> velocities;
-
   gl_buffer_t<vec4[]> positions_out;
   gl_buffer_t<vec4[]> velocities_out;
+
+  // Interpolation of hues for rendering.
+  gl_buffer_t<vec4[]> colors_buffer;
 
   // Hash each particle to a cell ID.
   gl_buffer_t<int[]> cell_hash;
@@ -87,39 +121,129 @@ struct system_t {
   // Keep the min and max particle index for each cell.
   gl_buffer_t<ivec2[]> cell_ranges;
 
+  // Cache of buffers for merge sort.
   mgpu::mergesort_pipeline_t<int, int> sort_pipeline;
 
-  SimParams params;
-  int num_particles;
-
-  void advance_frame();
-  void collide();
-  void integrate();
-  void render();
-  void sort_particles();
+  GLuint vao;
 };
 
-// Park the simulation parameters at ubo 1 and keep it there throughout the
-// frame. UBO 0 is reserved for gl_transform.
-[[using spirv: uniform, binding(1)]]
-SimParams sim_params_ubo;
+vec3 color_ramp(float t) {
+  const int ncolors = 6;
+  static constexpr vec3 c[ncolors] {
+    { 1.0, 0.0, 0.0 },
+    { 1.0, 0.5, 0.0 },
+    { 1.0, 1.0, 0.0 },
+    { 0.0, 1.0, 0.0 },
+    { 0.0, 1.0, 1.0 },
+    { 0.0, 0.0, 1.0 },
+  };
 
-void system_t::advance_frame() {
+  t = t * (ncolors - 1);
+  int i = (int) t;
+  float u = t - floor(t);
+
+  return mix(c[i], c[(i + 1) % ncolors], u);
+}
+
+inline float frand(float range) {
+  return (range / RAND_MAX) * rand();
+}
+inline float frand(float min, float max) {
+  return min + frand(max - min);
+}
+inline float frand() {
+  return frand(1);
+}
+inline vec3 frand3(float r) {
+  return vec3(frand(-r, r), frand(-r, r), frand(-r, r));
+}
+
+system_t::system_t(const SimParams& params) : params(params) {
   int num_particles = params.numBodies;
 
+  positions.resize(num_particles);
+  velocities.resize(num_particles);
+  positions_out.resize(num_particles);
+  velocities_out.resize(num_particles);
+  colors_buffer.resize(num_particles);
   cell_hash.resize(num_particles);
   gather_indices.resize(num_particles);
-  cell_ranges.resize(num_particles);
 
+  int num_cells = params.gridSize.x * params.gridSize.y * params.gridSize.z;
+  cell_ranges.resize(num_cells);
+
+  // Fill the color buffer.
+  std::vector<vec4> colors(num_particles);
+  for(int i = 0; i < num_particles; ++i)
+    colors[i] = vec4(color_ramp((float)i / num_particles), 1);
+  colors_buffer.set_data(colors);
+
+  // Create the VAO that binds the color data.
+  glCreateVertexArrays(1, &vao);
+  glVertexArrayVertexBuffer(vao, 0, colors_buffer, 0, sizeof(vec4));
+  glVertexArrayAttribBinding(vao, 0, 0);
+  glVertexArrayAttribFormat(vao, 0, 4, GL_FLOAT, GL_FALSE, 0);
+  glEnableVertexArrayAttrib(vao, 0);
+
+  // Create the shader.
+}
+
+system_t::~system_t() {
+  glDeleteVertexArrays(1, &vao);
+}
+
+void system_t::reset() {
+  // Set the positions to a grid of particles. Reset the velocities to 0.
+  int s = (int)ceil(powf((float)params.numBodies, 1.f / 3));
+  float r = params.particleRadius;
+  init_grid(ivec3(s), 2 * r, .01f * r);
+}
+
+void system_t::init_grid(ivec3 size, float spacing, float jitter) {
+  int num_particles = params.numBodies;
+  float r = params.particleRadius;
+
+  std::vector<vec4> pos_host(num_particles);
+  for(int z = 0, index = 0; z < size.z; ++z) {
+    for(int y = 0; y < size.y; ++y) {
+      for(int x = 0; x < size.x && index < num_particles; ++x, ++index) {
+        vec3 v(x, y, z);
+        pos_host[index] = vec4(spacing * v + r + frand3(jitter), 1);
+      }
+    }
+  }
+
+  positions.set_data(pos_host);
+
+  vec4 zero { };
+  glClearNamedBufferSubData(velocities, GL_RGBA32F, 0, 
+    num_particles * sizeof(vec4), GL_RGBA, GL_FLOAT, &zero);
+}
+
+/*
+void system_t::add_sphere(int start, int count, int r, float spacing) {
+  for(int z = -r, index = 0; z <= r; ++z) {
+    for(int y = -r; y <= r; ++y) {
+      for(int x = -r; x <= r && index < count; ++x) {
+        vec3 pos = spacing * vec3(x, y, z);
+        float l = length(pos);
+
+        if(l < params.particleRadius) {
+
+          ++index;
+        }
+      }
+    }
+  }
+}
+*/
+void system_t::update(float deltaTime) {
   // First perform collision to accumulate forces on each particles.
   // This is the physics part.
   collide();
 
   // Advance the velocities and positions.
   integrate();
-
-  // Draw the pretty picture.
-  render();
 
   // Reorder the particles for the next frame.
   sort_particles();
@@ -172,7 +296,7 @@ void system_t::collide() {
     vel += f * sim_params_ubo.deltaTime;
     vel_out[index] = vec4(vel, 0);
 
-  }, num_particles);
+  }, params.numBodies);
 }
 
 void system_t::integrate() {
@@ -209,72 +333,8 @@ void system_t::integrate() {
     pos_data[index] = vec4(pos, pos4.w);
     vel_data[index] = vec4(vel, vel4.w);
 
-  }, num_particles);
+  }, params.numBodies);
 }
-
-[[spirv::vert]]
-void vertex_shader() {
-//  vec3 
-}
-
-[[spirv::frag]]
-void fragment_shader() {
-  constexpr vec3 light_dir(.577, .577, .577);
-
-  // Calculate normal from texture coordinates.
-
-}
-
-
-void system_t::render() {
-
-}
-
-
-      // vertex shader
-      const char *vertexShader = STRINGIFY(
-                                     uniform float pointRadius;  // point size in world space
-                                     uniform float pointScale;   // scale to calculate size in pixels
-                                     uniform float densityScale;
-                                     uniform float densityOffset;
-                                     void main()
-      {
-          // calculate window-space point size
-          vec3 posEye = vec3(gl_ModelViewMatrix * vec4(gl_Vertex.xyz, 1.0));
-          float dist = length(posEye);
-          gl_PointSize = pointRadius * (pointScale / dist);
-
-          gl_TexCoord[0] = gl_MultiTexCoord0;
-          gl_Position = gl_ModelViewProjectionMatrix * vec4(gl_Vertex.xyz, 1.0);
-
-          gl_FrontColor = gl_Color;
-      }
-                                 );
-
-      // pixel shader for rendering points as shaded spheres
-      const char *spherePixelShader = STRINGIFY(
-                                          void main()
-      {
-          const vec3 lightDir = vec3(0.577, 0.577, 0.577);
-
-          // calculate normal from texture coordinates
-          vec3 N;
-          N.xy = gl_TexCoord[0].xy*vec2(2.0, -2.0) + vec2(-1.0, 1.0);
-          float mag = dot(N.xy, N.xy);
-
-          if (mag > 1.0) discard;   // kill pixels outside circle
-
-          N.z = sqrt(1.0-mag);
-
-          // calculate lighting
-          float diffuse = max(0.0, dot(lightDir, N));
-
-          gl_FragColor = gl_Color * diffuse;
-      }
-                                      );
-
-
-
 
 void system_t::sort_particles() {
   int num_particles = params.numBodies;
@@ -341,6 +401,120 @@ void system_t::sort_particles() {
   }, num_particles);
 }
 
-int main() {
-  mgpu::app_t app("particles");
+////////////////////////////////////////////////////////////////////////////////
+
+struct myapp_t : app_t {
+  myapp_t();
+  void display() override;
+  void configure();
+
+  SimParams params;
+  gl_buffer_t<const SimParams> params_ubo;
+
+  std::unique_ptr<system_t> system;
+  GLuint program;
+};
+
+[[spirv::vert]]
+void vert_shader() {
+  vec4 pos = shader_readonly<0, vec4[]>[glvert_VertexID];
+  vec4 posEye = sim_params_ubo.view * pos;
+  
+  float dist = length(posEye);
+  glvert_Output.PointSize = sim_params_ubo.pointRadius * 
+    sim_params_ubo.pointScale / dist;
+  glvert_Output.Position = sim_params_ubo.proj * posEye;
+
+  // Pass the color through.
+  shader_out<0, vec4> = shader_in<0, vec4>;
+}
+
+[[spirv::frag]]
+void frag_shader() {
+  constexpr vec3 light_dir(.577, .577, .577);
+  
+  // Scale the point into a (-1, +1) square.
+  vec2 pos = vec2(2, -2) * glfrag_PointCoord + vec2(-1, 1);
+  float mag2 = dot(pos, pos);
+  if(mag2 > 1)
+    glfrag_discard();
+
+  vec3 N(pos, sqrt(1 - mag2));
+
+  float diffuse = max(0.f, dot(light_dir, N));
+  shader_out<0, vec4> = shader_in<0, vec4> * diffuse;
+}
+
+myapp_t::myapp_t() : app_t("Particles simulation", 800, 600) { 
+
+  camera.adjust(0, 0, 1);
+
+  // Create the shaders.
+  GLuint vs = glCreateShader(GL_VERTEX_SHADER);
+  GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
+  GLuint shaders[] { vs, fs };
+  glShaderBinary(2, shaders, GL_SHADER_BINARY_FORMAT_SPIR_V_ARB, 
+    __spirv_data, __spirv_size);
+
+  glSpecializeShader(vs, @spirv(vert_shader), 0, nullptr, nullptr);
+  glSpecializeShader(fs, @spirv(frag_shader), 0, nullptr, nullptr);
+
+  program = glCreateProgram();
+  glAttachShader(program, vs);
+  glAttachShader(program, fs);
+  glLinkProgram(program);
+
+  // Initialize a system.
+  system = std::make_unique<system_t>(params);
+  system->reset();
+}
+
+void myapp_t::display() {
+  configure();
+
+  // Set the view matrix.
+  int width, height;
+  glfwGetWindowSize(window, &width, &height);
+  params.proj = camera.get_perspective(width, height);
+  params.view = camera.get_view();
+
+  params.fov = camera.fov;
+  params.pointScale = height / tanf(params.fov * .5f);
+
+  // Upload and bind the simulation parameters to UBO=1.
+  params_ubo.set_data(params);
+  params_ubo.bind_ubo(1);
+
+  // Clear the background.
+  const float bg[4] { .75f, .75f, .75f, 1.0f };
+  glClearBufferfv(GL_COLOR, 0, bg);
+  glClear(GL_DEPTH_BUFFER_BIT);
+
+  // Set the context for point rendering.
+  glEnable(GL_PROGRAM_POINT_SIZE);
+  glDepthMask(GL_TRUE);
+  glEnable(GL_DEPTH_TEST);
+
+  glUseProgram(program);
+  glBindVertexArray(system->vao);
+  system->positions.bind_ssbo(0);
+
+  glDrawArrays(GL_POINTS, 0, params.numBodies);
+
+  glUseProgram(0);
+  glDisable(GL_PROGRAM_POINT_SIZE);
+}
+
+void myapp_t::configure() {
+  // Set ImGui to control system parameters.
+}
+
+int main() { 
+  glfwInit();
+  gl3wInit();
+
+  myapp_t app;
+  app.loop();
+
+  return 0;
 }
