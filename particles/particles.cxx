@@ -8,11 +8,11 @@ using mgpu::gl_buffer_t;
 // to support shaders.
 struct SimParams {
   // Particle characteristics.
-  int   numBodies         = 16384;
+  int   numBodies         = 64; //16384;
   float particleRadius    = 1.f / 64;
 
   // Particle distribution.
-  ivec3 gridSize          = ivec3(64, 64, 64);
+  ivec3 gridSize          = ivec3(64);
   vec3  worldOrigin       = vec3(-1, -1, -1);
   vec3  cellSize          = 2 * particleRadius;
 
@@ -97,9 +97,9 @@ struct system_t {
   // void add_sphere(int start, float* pos, float* vel, int r, float spacing);
 
   void update(float deltaTime);
-  void collide();
   void integrate();
   void sort_particles();
+  void collide();
 
   const SimParams& params;
 
@@ -184,8 +184,6 @@ system_t::system_t(const SimParams& params) : params(params) {
   glVertexArrayAttribBinding(vao, 0, 0);
   glVertexArrayAttribFormat(vao, 0, 4, GL_FLOAT, GL_FALSE, 0);
   glEnableVertexArrayAttrib(vao, 0);
-
-  // Create the shader.
 }
 
 system_t::~system_t() {
@@ -200,6 +198,9 @@ void system_t::reset() {
 }
 
 void system_t::init_grid(ivec3 size, float spacing, float jitter) {
+
+  spacing *= .7;
+
   int num_particles = params.numBodies;
   float r = params.particleRadius;
 
@@ -238,15 +239,106 @@ void system_t::add_sphere(int start, int count, int r, float spacing) {
 }
 */
 void system_t::update(float deltaTime) {
-  // First perform collision to accumulate forces on each particles.
+  // Reorder the particles so that we can perform fast collision detection.
+  sort_particles();
+
+  // Perform collision to accumulate forces on each particles.
   // This is the physics part.
   collide();
 
   // Advance the velocities and positions.
   integrate();
 
-  // Reorder the particles for the next frame.
-  sort_particles();
+}
+
+void system_t::sort_particles() {
+  int num_particles = params.numBodies;
+
+  // Hash particles into cells.
+  auto pos_data = positions.bind_ssbo<0>();
+  auto hash_data = cell_hash.bind_ssbo<1>();
+
+  // 1. Quantize the particles into cells. Hash the cell coordinates
+  //    into an integer.
+  mgpu::gl_transform([=](int index) {
+    vec3 pos = pos_data[index].xyz;
+    ivec3 gridPos = calcGridPos(pos, sim_params_ubo);
+    int hash = hashGridPos(gridPos, sim_params_ubo);
+
+    hash_data[index] = hash;
+
+  }, num_particles);
+
+  // 2. Sort the particles by their hash. The value of the sort is the index
+  //    of the particle.
+  sort_pipeline.sort_keys_indices(cell_hash, gather_indices, num_particles);
+
+  {
+    auto hash = cell_hash.get_data();
+    auto indices = gather_indices.get_data();
+    printf("%3d: %3d %3d\n", @range(), hash[:], indices[:])...;
+    bool is_sorted = (... && (hash[:] <= hash[1:]));
+    printf("hash sorted = %d\n", is_sorted);
+  }
+
+  // auto g = gather_indices.get_data();
+  // printf("%5d: %5d\n", @range(), g[:])...;
+  // exit(0);
+
+  // 3. Reorder the particles according to their gather indices.
+
+  // Clear the ranges array because we'll never visit cells with no
+  // particles.  
+  ivec2 zero { };
+  int cell_count = params.gridSize.x * params.gridSize.y * params.gridSize.z;
+  glClearNamedBufferSubData(cell_ranges, GL_RG32I, 0, 
+    cell_count * sizeof(ivec2), GL_RG, GL_INT, &zero);
+
+  // Reorder the particles and fill the ranges.
+  auto pos_in = positions.bind_ssbo<0>();
+  auto vel_in = velocities.bind_ssbo<1>();
+  auto hash_in = cell_hash.bind_ssbo<2>();
+  auto gather_in = gather_indices.bind_ssbo<3>();
+  auto pos_out = positions_out.bind_ssbo<4>();
+  auto vel_out = positions_out.bind_ssbo<5>();
+  auto cell_ranges_out = cell_ranges.bind_ssbo<6>();
+
+  mgpu::gl_transform([=](int index) {
+    // Load the gather and hash values.
+    int gather = gather_in[index];
+    int hash = hash_in[index];
+    int hash_prev = index ? hash_in[index - 1] : -1;
+
+    // Load the particle data.
+    vec4 pos = pos_in[gather];
+    vec4 vel = vel_in[gather];
+
+    // Write the cell ranges.
+    if(hash_prev < hash) {
+      if(index) cell_ranges_out[hash_prev].y = index;
+      cell_ranges_out[hash].x = index;
+    }
+
+    if(index == sim_params_ubo.numBodies - 1)
+      cell_ranges_out[hash].y = sim_params_ubo.numBodies;
+
+    // Write the particles to memory.
+    pos_out[index] = pos;
+    vel_out[index] = vel;
+
+  }, num_particles);
+
+  // Swap the old containers with the new ones.
+  positions.swap(positions_out);
+  velocities.swap(velocities_out);
+
+  // Print the ranges.
+  // auto ranges = cell_ranges.get_data();
+  //for(int i = 0; i < ranges.size(); ++i) {
+  //  if(ranges[i].x || ranges[i].y)
+  //    printf("%6d: (%5d, %5d)\n", i, ranges[i].x, ranges[i].y);
+  //}
+  //exit(0);
 }
 
 void system_t::collide() {
@@ -297,6 +389,12 @@ void system_t::collide() {
     vel_out[index] = vec4(vel, 0);
 
   }, params.numBodies);
+
+  std::vector<vec4> vel = velocities.get_data();
+  for(int i = 0; i < vel.size(); ++i)
+    printf("%5d: %f %f %f\n", i, vel[i].x, vel[i].y, vel[i].z);
+
+  exit(0);
 }
 
 void system_t::integrate() {
@@ -334,71 +432,6 @@ void system_t::integrate() {
     vel_data[index] = vec4(vel, vel4.w);
 
   }, params.numBodies);
-}
-
-void system_t::sort_particles() {
-  int num_particles = params.numBodies;
-
-  // Hash particles into cells.
-  auto pos_data = positions.bind_ssbo<0>();
-  auto hash_data = cell_hash.bind_ssbo<1>();
-
-  // 1. Quantize the particles into cells. Hash the cell coordinates
-  //    into an integer.
-  mgpu::gl_transform([=](int index) {
-    vec3 pos = pos_data[index].xyz;
-    ivec3 gridPos = calcGridPos(pos, sim_params_ubo);
-    int hash = hashGridPos(gridPos, sim_params_ubo);
-
-    hash_data[index] = hash;
-
-  }, num_particles);
-
-  // 2. Sort the particles by their hash. The value of the sort is the index
-  //    of the particle.
-  sort_pipeline.sort_keys_indices(cell_hash, gather_indices, num_particles);
-
-  // 3. Reorder the particles according to their gather indices.
-
-  // Clear the ranges array because we'll never visit cells with no
-  // particles.  
-  ivec2 zero { };
-  glClearNamedBufferSubData(cell_ranges, GL_RG32I, 0, 
-    num_particles * sizeof(ivec2), GL_RG, GL_INT, &zero);
-
-  // Reorder the particles and fill the ranges.
-  auto pos_in = positions.bind_ssbo<0>();
-  auto vel_in = velocities.bind_ssbo<1>();
-  auto hash_in = cell_hash.bind_ssbo<2>();
-  auto gather_in = gather_indices.bind_ssbo<3>();
-  auto pos_out = positions_out.bind_ssbo<4>();
-  auto vel_out = positions_out.bind_ssbo<5>();
-  auto cell_ranges_out = cell_ranges.bind_ssbo<6>();
-
-  mgpu::gl_transform([=](int index) {
-    // Load the gather and hash values.
-    int gather = gather_in[index];
-    int hash = hash_in[index];
-    int hash_prev = index ? hash_in[index - 1] : -1;
-
-    // Load the particle data.
-    vec4 pos = pos_in[gather];
-    vec4 vel = vel_in[gather];
-
-    // Write the cell ranges.
-    if(hash_prev < hash) {
-      if(index) cell_ranges_out[hash_prev].y = index;
-      cell_ranges_out[hash].x = index;
-    }
-
-    if(index == sim_params_ubo.numBodies - 1)
-      cell_ranges_out[hash].y = sim_params_ubo.numBodies;
-
-    // Write the particles to memory.
-    pos_out[index] = pos;
-    vel_out[index] = vel;
-
-  }, num_particles);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -447,7 +480,7 @@ void frag_shader() {
 
 myapp_t::myapp_t() : app_t("Particles simulation", 800, 600) { 
 
-  camera.adjust(0, 0, 1);
+  camera.adjust(0, 0, .1);
 
   // Create the shaders.
   GLuint vs = glCreateShader(GL_VERTEX_SHADER);
@@ -503,6 +536,9 @@ void myapp_t::display() {
 
   glUseProgram(0);
   glDisable(GL_PROGRAM_POINT_SIZE);
+
+  // Integrate for the next frame.
+  system->update(.1);
 }
 
 void myapp_t::configure() {
