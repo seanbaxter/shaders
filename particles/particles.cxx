@@ -8,7 +8,7 @@ using mgpu::gl_buffer_t;
 // to support shaders.
 struct SimParams {
   // Particle characteristics.
-  int   numBodies         = 64; //16384;
+  int   numBodies         = 16384;
   float particleRadius    = 1.f / 64;
 
   // Particle distribution.
@@ -63,7 +63,7 @@ inline vec3 collide_spheres(vec3 posA, vec3 posB, vec3 velA, vec3 velB,
     vec3 tanVel = relVel - dot(relVel, relVel) * norm;
 
     // spring force.
-    force = -params.spring * (collideDist - dist);
+    force = -params.spring * (collideDist - dist) * norm;
     
     // dashpot (damping) fgorce
     force += params.damping * relVel;
@@ -273,13 +273,13 @@ void system_t::sort_particles() {
   //    of the particle.
   sort_pipeline.sort_keys_indices(cell_hash, gather_indices, num_particles);
 
-  {
-    auto hash = cell_hash.get_data();
-    auto indices = gather_indices.get_data();
-    printf("%3d: %3d %3d\n", @range(), hash[:], indices[:])...;
-    bool is_sorted = (... && (hash[:] <= hash[1:]));
-    printf("hash sorted = %d\n", is_sorted);
-  }
+  // {
+  //   auto hash = cell_hash.get_data();
+  //   auto indices = gather_indices.get_data();
+  //   printf("%3d: %3d %3d\n", @range(), hash[:], indices[:])...;
+  //   bool is_sorted = (... && (hash[:] <= hash[1:]));
+  //   printf("hash sorted = %d\n", is_sorted);
+  // }
 
   // auto g = gather_indices.get_data();
   // printf("%5d: %5d\n", @range(), g[:])...;
@@ -300,7 +300,7 @@ void system_t::sort_particles() {
   auto hash_in = cell_hash.bind_ssbo<2>();
   auto gather_in = gather_indices.bind_ssbo<3>();
   auto pos_out = positions_out.bind_ssbo<4>();
-  auto vel_out = positions_out.bind_ssbo<5>();
+  auto vel_out = velocities_out.bind_ssbo<5>();
   auto cell_ranges_out = cell_ranges.bind_ssbo<6>();
 
   mgpu::gl_transform([=](int index) {
@@ -332,13 +332,14 @@ void system_t::sort_particles() {
   positions.swap(positions_out);
   velocities.swap(velocities_out);
 
-  // Print the ranges.
-  // auto ranges = cell_ranges.get_data();
-  //for(int i = 0; i < ranges.size(); ++i) {
-  //  if(ranges[i].x || ranges[i].y)
-  //    printf("%6d: (%5d, %5d)\n", i, ranges[i].x, ranges[i].y);
-  //}
-  //exit(0);
+  // {
+  //   auto p = positions.get_data();
+  //   auto v = velocities.get_data();
+  //   for(int i = 0; i < p.size(); ++i) {
+  //     printf("%3d: %f %f %f, %f %f %f\n", 
+  //       i, p[i].x, p[i].y, p[i].z, v[i].x, v[i].y, v[i].z);
+  //   }
+  // }
 }
 
 void system_t::collide() {
@@ -346,7 +347,7 @@ void system_t::collide() {
   auto vel_in = velocities.bind_ssbo<1>();
   auto cell_ranges_in = cell_ranges.bind_ssbo<2>();
 
-  auto vel_out = velocities.bind_ssbo<3>();
+  auto vel_out = velocities_out.bind_ssbo<3>();
 
   mgpu::gl_transform([=](int index) {
     vec3 f { };
@@ -368,21 +369,25 @@ void system_t::collide() {
           // Get the range of particles for this cell.
           ivec2 range = cell_ranges_in[hash];
 
+          // Visit each particle in the cell.
           for(int i = range.x; i < range.y; ++i) {
-            // Visit each particle in the cell.
-            vec3 pos2 = pos_in[i].xyz;
-            vec3 vel2 = vel_in[i].xyz;
-
-            // Compute the force on the left particle.
-            f += collide_spheres(pos, pos2, vel, vel2, r, r, sim_params_ubo);
+            
+            // Don't collide with one's self.
+            if(i != index) {
+              vec3 pos2 = pos_in[i].xyz;
+              vec3 vel2 = vel_in[i].xyz; 
+              
+              // Compute the force on the left particle.
+              f += collide_spheres(pos, pos2, vel, vel2, r, r, sim_params_ubo);
+            }
           }
         }
       }
     }
 
     // Collide with the cursor sphere.
-    f += collide_spheres(pos, sim_params_ubo.colliderPos, vel, vec3(), r, 
-      sim_params_ubo.colliderRadius, sim_params_ubo);
+    // f += collide_spheres(pos, sim_params_ubo.colliderPos, vel, vec3(), r, 
+    //   sim_params_ubo.colliderRadius, sim_params_ubo);
 
     // Integrate the velocity by the new acceleration and write out.
     vel += f * sim_params_ubo.deltaTime;
@@ -390,11 +395,13 @@ void system_t::collide() {
 
   }, params.numBodies);
 
-  std::vector<vec4> vel = velocities.get_data();
-  for(int i = 0; i < vel.size(); ++i)
-    printf("%5d: %f %f %f\n", i, vel[i].x, vel[i].y, vel[i].z);
+  velocities.swap(velocities_out);
 
-  exit(0);
+  // std::vector<vec4> vel = velocities.get_data();
+  // for(int i = 0; i < vel.size(); ++i)
+  //   printf("%5d: %f %f %f\n", i, vel[i].x, vel[i].y, vel[i].z);
+ //
+  // exit(0);
 }
 
 void system_t::integrate() {
