@@ -8,7 +8,7 @@ using mgpu::gl_buffer_t;
 // to support shaders.
 struct SimParams {
   // Particle characteristics.
-  int   numBodies         = 16384;
+  int   numBodies         = 16384 * 4;
   float particleRadius    = 1.f / 64;
 
   // Particle distribution.
@@ -129,7 +129,7 @@ struct system_t {
 
 vec3 color_ramp(float t) {
   const int ncolors = 6;
-  static constexpr vec3 c[ncolors] {
+  const vec3 c[ncolors] {
     { 1.0, 0.0, 0.0 },
     { 1.0, 0.5, 0.0 },
     { 1.0, 1.0, 0.0 },
@@ -138,9 +138,9 @@ vec3 color_ramp(float t) {
     { 0.0, 0.0, 1.0 },
   };
 
-  t = t * (ncolors - 1);
-  int i = (int) t;
-  float u = t - floor(t);
+  t *= ncolors;
+  int i = (int)floor(t);
+  float u = t - i;
 
   return mix(c[i], c[(i + 1) % ncolors], u);
 }
@@ -174,8 +174,9 @@ system_t::system_t(const SimParams& params) : params(params) {
 
   // Fill the color buffer.
   std::vector<vec4> colors(num_particles);
+  float coef = 1.f / num_particles;
   for(int i = 0; i < num_particles; ++i)
-    colors[i] = vec4(color_ramp((float)i / num_particles), 1);
+    colors[i] = vec4(color_ramp(coef * i), 1);
   colors_buffer.set_data(colors);
 
   // Create the VAO that binds the color data.
@@ -432,7 +433,7 @@ void system_t::integrate() {
 
     bvec3 clip_min = pos < -1 + params.particleRadius;
     pos = clip_min ? -1 + params.particleRadius : pos;
-    vel *= clip_max ? params.boundaryDamping : 1;
+    vel *= clip_min ? params.boundaryDamping : 1;
 
     // Store updated terms.
     pos_data[index] = vec4(pos, pos4.w);
@@ -519,7 +520,7 @@ void myapp_t::display() {
   params.view = camera.get_view();
 
   params.fov = camera.fov;
-  params.pointScale = height / tanf(params.fov * .5f);
+  params.pointScale = .5f * height / tanf(params.fov * .5f);
 
   // Upload and bind the simulation parameters to UBO=1.
   params_ubo.set_data(params);
@@ -538,6 +539,9 @@ void myapp_t::display() {
   glUseProgram(program);
   glBindVertexArray(system->vao);
   system->positions.bind_ssbo(0);
+
+  for(int i = 1; i < 7; ++i)
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, 0);
 
   glDrawArrays(GL_POINTS, 0, params.numBodies);
 
