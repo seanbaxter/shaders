@@ -71,6 +71,13 @@
     * [Generating compiled sprite compute shaders](#generating-compiled-sprite-compute-shaders)
     * [Compile-time calls to external libraries](#compile-time-calls-to-external-libraries)
 
+1. [Compiling CUDA code with C++ shaders](#compiling-cuda-code-with-c-shaders)
+
+    [![particles](images/particles_small.png)](
+    #compiling-cudo-code-with-c-shaders)
+  * [The particles demo](#the-particles-demo)
+  * [Moderngpu for shaders](#moderngpu-for-shaders)
+
 1. [Shader parameters and push constants](#shader-parameters-and-push-constants)
 
     * [Push constant limits](#push-constant-limits)
@@ -2560,6 +2567,208 @@ The project that compiles the definitions for STB image and performs PNG decodin
 The project that calls the externally-compiled STB image library takes .3s. That's really good. That includes the generation of 19 pretty long compute shaders.
 
 The second executable is also 50 KB slimmer. This is the size that `stbi_load` and its dependencies takes in the executable. The executable takes 149KB. All but 25KB is due to the SPIR-V module embedded inside it.
+
+## Compiling CUDA code with C++ shaders
+
+![particles](images/particles.png)
+
+[Simon Green](https://twitter.com/simesgreen)'s 2007 CUDA demo _particles_ was the first really sophisticated CUDA sample. By using a parallel to sort to order particles by their cell hashes, it required more technology than was generally available with fragment shaders at the time.
+
+GPU parallel sorts are not trivial to author. The single-source C++ model introduced with CUDA allows programmers to use templates in defining kernels, which gives sort implementations their flexibilty: key type, value type, grain size and comparators can be expressed with template parameters, allowing for a lot of customization. Domain-specific shader languages don't have the same level of generic programming support and don't interface with the host environment nearly as well, making complex, multi-pass cooperative algorithms far harder to implement.
+
+Like CUDA, Circle is a compiler frontend that lowers C++ to a GPU intermediate representation. The beauty in the design of parallel libraries like [moderngpu](https://www.github.com/moderngpu/moderngpu), [thrust](https://github.com/NVIDIA/thrust) and [CUB](https://github.com/NVIDIA/cub) is that, for performance and customization reasons, they're already highly parameterized. This has the felicitous side effect of allowing their core algorithms to be compiled using Circle to generate OpenGL/Vulkan compute shaders.
+
+[[**cta_merge.hxx**]](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/cta_merge.hxx)
+```cpp
+template<bounds_t bounds = bounds_lower, typename a_keys_it,
+  typename b_keys_it, typename comp_t>
+int merge_path(a_keys_it a_keys, int a_count, b_keys_it b_keys, 
+  int b_count, int diag, comp_t comp) {
+
+  typedef typename std::iterator_traits<a_keys_it>::value_type type_t;
+  int begin = max(0, diag - b_count);
+  int end   = min(diag, a_count);
+
+  while(begin < end) {
+    int mid = (begin + end) / 2;
+    type_t a_key = a_keys[mid];
+    type_t b_key = b_keys[diag - 1 - mid];
+    bool pred = (bounds_upper == bounds) ?
+      comp(a_key, b_key) :
+      !comp(b_key, a_key);
+
+    if(pred) begin = mid + 1;
+    else end = mid;
+  }
+  return begin;
+}
+```
+
+This utility code was copied straight from the CUDA version of moderngpu 2.0. It performs a binary search of two sorted input arrays to find the _diag_-smallest element between the two of them. Put in visual terms, this finds the intersection of the merge path with a diagonal, as explained [https://moderngpu.github.io/merge.html](here).
+
+The input arrays are abstracted behind template parameters `a_keys_it` and `b_keys_it`. While these types are often pointers, there's good reason for the parametization: it allows users to provide `zip_iterators`, `counting_iterators` and other custom types to bind disparate forms of data together in a way that resembles an array. This is the kind of parameterization that makes CUDA algorithms so flexible.
+
+Compute shaders have very restricted support for pointers, so this not code not having any makes it much more likely to lower to a shader IR like SPIR-V or DXIR. Indeed, this routine compiles for CPU execution, PTX for execution or SPIR-V for compute shader execution.
+
+[**kernel_partition.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/kernel_partition.hxx)
+```cpp
+template<bounds_t bounds, typename mp_it, typename a_it, typename b_it, 
+  typename comp_t>
+void kernel_partition(mp_it mp_data, a_it a, int a_count, b_it b, int b_count, 
+  int spacing, comp_t comp) {
+
+  int num_partitions = (int)div_up(a_count + b_count, spacing) + 1;
+  int index = threadIdx.x + blockDim.x * blockIdx.x;
+  if(index < num_partitions) {
+    int diag = min(spacing * index, a_count + b_count);
+    mp_data[index] = merge_path<bounds>(a, a_count, b, b_count, diag, comp); 
+  }
+}
+```
+
+I factored out the logic for the kernel that performs the partitioning into something that's API- and IR-neutral. `kernel_partition` isn't tagged with `[spirv::comp]` to make it an OpenGL/Vulkan compute shader, nor is it tagged with `__global__` to make it a CUDA kernel. But it implements all the responsibilities of a kernel. The thread ID and block ID are pulled from the `threadIdx` and `blockIdx` variables, and combined to get the global thread index within the launch. If this global index is less than the work item count, it performs the merge path search and stores the data out to `mp_data`. Even at this point, the input and output array types _are not pointers_. They remain iterators. We want to defer selection of actual data types until we reach the kernel or shader entry point, because writing explicit data types inhibits portability.
+
+[**kernel_partition.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/kernel_partition.hxx)
+```cpp
+template<bounds_t bounds, typename params_t, int mp, int ubo>
+[[using spirv: comp, local_size(128)]]
+void kernel_partition() {
+  // Load the kernel parameters from the uniform buffer at binding=ubo.
+  params_t params = shader_uniform<ubo, params_t>;
+
+  // Launch the kernel using kernel parameters.
+  kernel_partition<bounds>(
+    writeonly_iterator_t<int, mp>(),
+    params.a_keys,
+    params.a_count,
+    params.b_keys,
+    params.b_count,
+    params.spacing,
+    params.comp
+  );
+}
+```
+
+The `kernel_partition` compute shader is the OpenGL entry point for the partition operation. Compute shaders aren't allowed to take function parameters, so the entry point's arguments have to be baked into a buffer object, bound to the OpenGL device context, and loaded out of a UBO on the shader side. This is how parameter passing is implemented with OpenGL compute shaders, so this operation has to be implemented in the compute shader entry point itself, rather than inside utility code that we intend to keep portable.
+
+The template parameters of `kernel_partition` specify the type of the structure that holds the compute shader's arguments, the resource at which the UBO with that data is bound, and the resource at which the SSBO holding the partitioning output is bound.
+
+Since shader APIs don't generally support pointers (although there is a recent [Vulkan extension](https://github.com/KhronosGroup/SPIRV-Registry/blob/master/extensions/EXT/SPV_EXT_physical_storage_buffer.asciidoc) that allows pointers into some buffers), we can't get a pointer to GPU memory on the host and pass it over the CPU-GPU divide as a kernel argument, like we can with CUDA or OpenCL. We need to construct an iterator that loads from a bound SSBO directly. Fortunately, the single source C++ design model makes this pretty easy.
+
+[**bindings.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/bindings.hxx**)
+```cpp
+template<auto index, typename type_t = @enum_type(index)>
+[[using spirv: uniform, binding((int)index)]]
+type_t shader_uniform;
+
+template<auto index, typename type_t = @enum_type(index)>
+[[using spirv: buffer, readonly, binding(index)]]
+type_t shader_readonly;
+
+template<auto index, typename type_t = @enum_type(index)>
+[[using spirv: buffer, writeonly, binding(index)]]
+type_t shader_writeonly;
+
+template<auto index, typename type_t = @enum_type(index)>
+[[using spirv: buffer, binding(index)]]
+type_t shader_buffer;
+```
+
+I like using [variable templates](#variable-templates) to _implicitly declare_ shader variables from their point of use in a shader. To sample a _readonly_ SSBO, just specialize `shader_readonly` and provide the binding location and type of the buffer. That is, `shader_readonly<3, int2[]>[i]` causes the declaration of a read-only SSBO at binding 3 with type `int2[]` and subscripts it with index `i`.
+
+Instead of passing pointers to the templated GPU algorithms, we'll pass class objects that implement a pointer-like interface but use variable templates to sample their arrays. 
+
+[**bindings.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/bindings.hxx**)
+```cpp
+template<typename accessor_t, typename type_t = decltype(accessor_t::access(0))>
+struct iterator_t : std::iterator_traits<const std::remove_reference_t<type_t>*> {
+
+  iterator_t() = default;
+  explicit iterator_t(int offset) : offset(offset) { }
+
+  iterator_t(const iterator_t&) = default;
+  iterator_t& operator=(const iterator_t&) = default;
+
+  iterator_t operator+(int diff) const noexcept {
+    return iterator_t(offset + diff);
+  }
+  iterator_t& operator+=(int diff) noexcept {
+    offset += diff;
+    return *this;
+  }
+  friend iterator_t operator+(int diff, iterator_t rhs) noexcept {
+    return iterator_t(diff + rhs.offset);
+  }
+
+  iterator_t operator-(int diff) const noexcept {
+    return iterator_t(offset - diff);
+  }
+  iterator_t& operator-=(int diff) noexcept {
+    offset -= diff;
+    return *this;
+  }
+
+  int operator-(iterator_t rhs) const noexcept {
+    return offset - rhs.offset;
+  }
+
+  decltype(auto) operator*() const noexcept {
+    return accessor_t::access(offset);
+  }
+
+  decltype(auto) operator[](int index) const noexcept {
+    return accessor_t::access(offset + index);
+  }
+
+  int offset = 0;
+};
+```
+
+The class template `iterator_t` implements the interface of a pointer, but keeps the offset as in 32-bit int data member. Actual access of the underlying data is delegated to the template parameter `accessor_t`. 
+
+```cpp
+template<typename type_t, int binding>
+struct readonly_access_t {
+  static type_t access(int index) noexcept {
+    return shader_readonly<binding, type_t[]>[index];
+  }
+};
+
+template<typename type_t, int binding>
+using readonly_iterator_t = iterator_t<readonly_access_t<type_t, binding> >;
+
+template<typename type_t, int binding>
+struct writeonly_access_t {
+  static type_t& access(int index) noexcept {
+    return shader_writeonly<binding, type_t[]>[index];
+  }
+};
+template<typename type_t, int binding>
+using writeonly_iterator_t = iterator_t<writeonly_access_t<type_t, binding> >;
+
+template<typename type_t, int binding>
+struct buffer_access_t {
+  static type_t& access(int index) noexcept {
+    return shader_buffer<binding, type_t[]>[index];
+  }
+};
+template<typename type_t, int binding>
+using buffer_iterator_t = iterator_t<buffer_access_t<type_t, binding> >;
+```
+
+The candidates for substitution include the `readonly_access_t`, `writeonly_access_t` and `buffer_access_t` class templates. Each accept type and binding parameters and implement a static member function `access` which specializes and samples a variable template. Use the corresponding alias templates to mint iterators over a type and binding index.
+
+It's important to keep in mind that the binding index of the SSBO is _part of the iterator's type_. We can aggregate iterators into a structure, optionally give them non-zero starting indices on the host, then copy them into device memory and bind to a UBO. The resource bindings in the iterators are intended to be viral, and propagate to the aggregate, and from there to the compute shader entry point and utility functions through the mechanism of template specialization.
+
+
+
+
+
+
+  * [The particles demo](#the-particles-demo)
+  * [Moderngpu for shaders](#moderngpu-for-shaders)
+
+
 
 ## Shader parameters and push constants
 

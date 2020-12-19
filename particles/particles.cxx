@@ -14,7 +14,7 @@ struct SimParams {
   float particleRadius    = 1.f / 64;
 
   // Particle distribution. This world box is always centered at the origin.
-  vec3  worldSize         = vec3(2, 2, 2);
+  vec3  worldSize         = vec3(2, 2, 1.5);
   vec3  cellSize          = 0;
   ivec3 gridSize          = 0;
 
@@ -30,7 +30,7 @@ struct SimParams {
   float attraction        = 0;
   float boundaryDamping   = -0.5f;
 
-  // The wrecking ball.
+  // TODO: The wrecking ball.
   vec3  colliderPos       = vec3(-1.2, -0.8, 0.8);
   float colliderRadius    = 0.2f;
 
@@ -166,14 +166,13 @@ void system_t::resize(bool clear) {
     velocities_out.resize(num_particles);
     cell_hash.resize(num_particles);
     gather_indices.resize(num_particles);
-
-    // Compute an optimal grid size.
-    float diam = 2 * params.particleRadius;
-    params.gridSize = max(1, ivec3(floor(params.worldSize / diam)));
-    params.cellSize = params.worldSize / (vec3)params.gridSize;
-
-    cell_ranges.resize(params.numCells());
   }
+
+  // Compute an optimal grid size.
+  float diam = 2 * params.particleRadius;
+  params.gridSize = max(1, ivec3(floor(params.worldSize / diam)));
+  params.cellSize = params.worldSize / (vec3)params.gridSize;
+  cell_ranges.resize(params.numCells());
 
   if(clear)
     init_grid(num_particles);
@@ -210,6 +209,9 @@ void system_t::init_grid(int count) {
       for(int x = 0; x < s && index < count; ++x, ++index) {
         vec3 pos = spacing * vec3(x, y, z) + r + frand(jitter) + center;
         pos_host[index] = vec4(pos, coef * index);
+
+        // Give the particle some downward velocity.
+        vel_host[index] = vec4(0, -.03, 0, 0);
       }
     }
   }
@@ -219,9 +221,6 @@ void system_t::init_grid(int count) {
 }
 
 void system_t::update(float deltaTime) {
-  // Check if particles have been added or removed.
-  resize();
-
   // Reorder the particles so that we can perform fast collision detection.
   sort_particles();
 
@@ -303,7 +302,6 @@ void system_t::collide() {
   auto pos_in = positions.bind_ssbo<0>();
   auto vel_in = velocities.bind_ssbo<1>();
   auto cell_ranges_in = cell_ranges.bind_ssbo<2>();
-
   auto vel_out = velocities_out.bind_ssbo<3>();
 
   mgpu::gl_transform([=](int index) {
@@ -343,11 +341,11 @@ void system_t::collide() {
     }
 
     // Collide with the cursor sphere.
-    f += collide_spheres(pos, sim_params_ubo.colliderPos, vel, vec3(), r, 
-      sim_params_ubo.colliderRadius, sim_params_ubo);
+    // f += collide_spheres(pos, sim_params_ubo.colliderPos, vel, vec3(), r, 
+    //   sim_params_ubo.colliderRadius, sim_params_ubo);
 
     // Integrate the velocity by the new acceleration and write out.
-    vel += f * sim_params_ubo.deltaTime;
+    vel += f; 
     vel_out[index] = vec4(vel, 0);
 
   }, params.numBodies);
@@ -398,20 +396,21 @@ void system_t::integrate() {
 
 inline vec3 color_ramp(float t) {
   const int ncolors = 6;
-  const vec3 c[ncolors] {
+  const vec3 c[ncolors + 1] {
     1, 0, 0,
     1, 1, 0,
     0, 1, 0, 
     0, 1, 1,
     0, 0, 1, 
     1, 0, 1,
+    1, 0, 0,
   };
 
   t *= ncolors;
   int i = (int)floor(t);
   float u = t - i;
 
-  return mix(c[i], c[(i + 1) % ncolors], u);
+  return mix(c[i], c[i + 1], u);
 }
 
 [[spirv::vert]]
@@ -472,7 +471,7 @@ struct myapp_t : app_t {
 
 myapp_t::myapp_t() : app_t("Particles simulation", 800, 600) { 
   camera.distance = 3;
-  // camera.yaw = radians(90.f);
+  camera.yaw = radians(90.f);
 
   // Create the shaders.
   GLuint vs1 = glCreateShader(GL_VERTEX_SHADER);
@@ -551,6 +550,9 @@ void myapp_t::display() {
 
   params.fov = camera.fov;
   params.pointScale = .5f * height / tanf(params.fov * .5f);
+  
+  // Check if particles have been added or removed.
+  system->resize();
 
   // Upload and bind the simulation parameters to UBO=1.
   system->params_ubo.set_data(params);
