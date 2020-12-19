@@ -2580,7 +2580,7 @@ Like CUDA, Circle is a compiler frontend that lowers C++ to a GPU intermediate r
 
 ### Moderngpu for shaders
 
-[[**cta_merge.hxx**]](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/cta_merge.hxx)
+[**cta_merge.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/cta_merge.hxx)
 ```cpp
 template<bounds_t bounds = bounds_lower, typename a_keys_it,
   typename b_keys_it, typename comp_t>
