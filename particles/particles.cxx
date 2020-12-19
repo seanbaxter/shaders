@@ -1,5 +1,7 @@
 #include <mgpu/kernel_mergesort.hxx>
 #include <memory>
+
+#define USE_IMGUI
 #include "../include/appglfw.hxx"
 
 using mgpu::gl_buffer_t;
@@ -98,8 +100,10 @@ struct system_t {
   system_t(const SimParams& params);
   ~system_t();
   
-  void reset();
-  void init_grid(ivec3 size, float spacing, float jitter);
+  // The reset writes count number of particles to the end of the array.
+  // This must be <= numBodies.
+  void reset(int count);
+  void init_grid(int count, ivec3 size, float spacing, float jitter);
 
   // void add_sphere(int start, float* pos, float* vel, int r, float spacing);
 
@@ -134,7 +138,7 @@ struct system_t {
   GLuint vao;
 };
 
-vec3 color_ramp(float t) {
+inline vec3 color_ramp(float t) {
   const int ncolors = 6;
   const vec3 c[ncolors] {
     { 1.0, 0.0, 0.0 },
@@ -192,20 +196,23 @@ system_t::system_t(const SimParams& params) : params(params) {
   glVertexArrayAttribBinding(vao, 0, 0);
   glVertexArrayAttribFormat(vao, 0, 4, GL_FLOAT, GL_FALSE, 0);
   glEnableVertexArrayAttrib(vao, 0);
+
+  // Set the initial particle positions.
+  reset(num_particles);
 }
 
 system_t::~system_t() {
   glDeleteVertexArrays(1, &vao);
 }
 
-void system_t::reset() {
+void system_t::reset(int count) {
   // Set the positions to a grid of particles. Reset the velocities to 0.
   int s = (int)ceil(powf((float)params.numBodies, 1.f / 3));
   float r = params.particleRadius;
-  init_grid(ivec3(s), 2 * r, .1f * r);
+  init_grid(count, ivec3(s), 2 * r, .1f * r);
 }
 
-void system_t::init_grid(ivec3 size, float spacing, float jitter) {
+void system_t::init_grid(int count, ivec3 size, float spacing, float jitter) {
   int num_particles = params.numBodies;
   float r = params.particleRadius;
 
@@ -539,7 +546,6 @@ myapp_t::myapp_t() : app_t("Particles simulation", 800, 600) {
 
   // Initialize a system.
   system = std::make_unique<system_t>(params);
-  system->reset();
 }
 
 void myapp_t::display() {
@@ -596,6 +602,14 @@ void myapp_t::display() {
 
 void myapp_t::configure() {
   // Set ImGui to control system parameters.
+  ImGui::Begin("particles simluation");
+
+    ImGui::SliderInt("num bodies", &params.numBodies, 1, 65536);
+
+    if(ImGui::Button("Reset"))
+      system->reset(params.numBodies);
+
+  ImGui::End();
 }
 
 int main() { 
