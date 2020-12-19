@@ -1,3 +1,7 @@
+#if __circle_build__ < 109
+#error "Requires Circle build 109"
+#endif
+
 #include <mgpu/kernel_mergesort.hxx>
 #include <memory>
 
@@ -255,17 +259,17 @@ void system_t::sort_particles() {
   //    of the particle.
   sort_pipeline.sort_keys_indices(cell_hash, gather_indices, num_particles);
 
-  // 3. Clear the ranges array because we'll never visit cells with no
-  // particles.  
-  cell_ranges.clear_bytes();
-
-  // 4. Reorder the particles according to their gather indices.
+  // 3. Reorder the particles according to their gather indices.
   auto pos_in = positions.bind_ssbo<0>();
   auto vel_in = velocities.bind_ssbo<1>();
   auto hash_in = cell_hash.bind_ssbo<2>();
   auto gather_in = gather_indices.bind_ssbo<3>();
   auto pos_out = positions_out.bind_ssbo<4>();
   auto vel_out = velocities_out.bind_ssbo<5>();
+
+  // Clear the ranges array because we'll never visit cells with no
+  // particles.  
+  cell_ranges.clear_bytes();
   auto cell_ranges_out = cell_ranges.bind_ssbo<6>();
 
   mgpu::gl_transform([=](int index) {
