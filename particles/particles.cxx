@@ -13,10 +13,10 @@ struct SimParams {
   int   numBodies         = 30000;
   float particleRadius    = 1.f / 64;
 
-  // Particle distribution.
-  ivec3 gridSize          = ivec3(64);
+  // Particle distribution. This world box is always centered at the origin.
   vec3  worldSize         = vec3(2, 2, 2);
-  vec3  cellSize          = 2 * particleRadius;
+  vec3  cellSize          = 0;
+  ivec3 gridSize          = 0;
 
   // Integration.
   vec3  gravity           = vec3(0, -.0003, 0);
@@ -41,11 +41,15 @@ struct SimParams {
   float pointRadius       = 0.0625f;
   float fov               = radians(60.0f);
 
-  vec3 worldMin() const noexcept {
-    return -worldSize / 2;
+  vec3 worldMin() const noexcept { return -worldSize / 2; }
+  vec3 worldMax() const noexcept { return  worldSize / 2; }
+
+  int numCells() const noexcept {
+    return gridSize.x * gridSize.y * gridSize.z;
   }
-  vec3 worldMax() const noexcept {
-    return worldSize / 2;
+
+  int cellHash(ivec3 cell) const noexcept {
+    return cell.x + gridSize.x * (cell.y + gridSize.y * cell.z);
   }
 };
 
@@ -92,35 +96,32 @@ inline ivec3 calcGridPos(vec3 p, const SimParams& params) {
 }
 
 inline int hashGridPos(ivec3 p, const SimParams& params) {
-  p &= params.gridSize - 1;
-  return p.x + params.gridSize.x * (p.y + params.gridSize.y * p.z);
+  p = clamp(p, ivec3(0), params.gridSize - 1);
+  return params.cellHash(p);
 }
 
 struct system_t {
-  system_t(const SimParams& params);
-  ~system_t();
+  system_t(SimParams params);
   
   // The reset writes count number of particles to the end of the array.
   // This must be <= numBodies.
-  void reset(int count);
-  void init_grid(int count, ivec3 size, float spacing, float jitter);
+  void reset();
+  void init_grid(int count);
 
-  // void add_sphere(int start, float* pos, float* vel, int r, float spacing);
-
+  void resize(bool clear = false);
   void update(float deltaTime);
   void integrate();
   void sort_particles();
   void collide();
 
-  const SimParams& params;
+  // Host and device copies of SimParams.
+  SimParams params;  
+  gl_buffer_t<const SimParams> params_ubo;
 
   gl_buffer_t<vec4[]> positions;
   gl_buffer_t<vec4[]> velocities;
   gl_buffer_t<vec4[]> positions_out;
   gl_buffer_t<vec4[]> velocities_out;
-
-  // Interpolation of hues for rendering.
-  gl_buffer_t<vec4[]> colors_buffer;
 
   // Hash each particle to a cell ID.
   gl_buffer_t<int[]> cell_hash;
@@ -134,27 +135,7 @@ struct system_t {
 
   // Cache of buffers for merge sort.
   mgpu::mergesort_pipeline_t<int, int> sort_pipeline;
-
-  GLuint vao;
 };
-
-inline vec3 color_ramp(float t) {
-  const int ncolors = 6;
-  const vec3 c[ncolors] {
-    { 1.0, 0.0, 0.0 },
-    { 1.0, 0.5, 0.0 },
-    { 1.0, 1.0, 0.0 },
-    { 0.0, 1.0, 0.0 },
-    { 0.0, 1.0, 1.0 },
-    { 0.0, 0.0, 1.0 },
-  };
-
-  t *= ncolors;
-  int i = (int)floor(t);
-  float u = t - i;
-
-  return mix(c[i], c[(i + 1) % ncolors], u);
-}
 
 inline float frand(float range) {
   return (range / RAND_MAX) * rand();
@@ -169,65 +150,72 @@ inline vec3 frand3(float r) {
   return vec3(frand(-r, r), frand(-r, r), frand(-r, r));
 }
 
-system_t::system_t(const SimParams& params) : params(params) {
+system_t::system_t(SimParams params) : params(params) {
+  reset();
+}
+
+void system_t::resize(bool clear) {
   int num_particles = params.numBodies;
+  int old_particles = positions.count;
 
-  positions.resize(num_particles);
-  velocities.resize(num_particles);
-  positions_out.resize(num_particles);
-  velocities_out.resize(num_particles);
-  colors_buffer.resize(num_particles);
-  cell_hash.resize(num_particles);
-  gather_indices.resize(num_particles);
+  // Resize the buffers according to the new particle count.
+  if(clear || num_particles != old_particles) {
+    positions.resize(num_particles, true);
+    velocities.resize(num_particles, true);
+    positions_out.resize(num_particles);
+    velocities_out.resize(num_particles);
+    cell_hash.resize(num_particles);
+    gather_indices.resize(num_particles);
 
-  int num_cells = params.gridSize.x * params.gridSize.y * params.gridSize.z;
-  cell_ranges.resize(num_cells);
+    // Compute an optimal grid size.
+    float diam = 2 * params.particleRadius;
+    params.gridSize = max(1, ivec3(floor(params.worldSize / diam)));
+    params.cellSize = params.worldSize / (vec3)params.gridSize;
 
-  // Fill the color buffer.
-  std::vector<vec4> colors(num_particles);
-  float coef = 1.f / num_particles;
-  for(int i = 0; i < num_particles; ++i)
-    colors[i] = vec4(color_ramp(coef * i), 1);
-  colors_buffer.set_data(colors);
+    cell_ranges.resize(params.numCells());
+  }
 
-  // Create the VAO that binds the color data.
-  glCreateVertexArrays(1, &vao);
-  glVertexArrayVertexBuffer(vao, 0, colors_buffer, 0, sizeof(vec4));
-  glVertexArrayAttribBinding(vao, 0, 0);
-  glVertexArrayAttribFormat(vao, 0, 4, GL_FLOAT, GL_FALSE, 0);
-  glEnableVertexArrayAttrib(vao, 0);
-
-  // Set the initial particle positions.
-  reset(num_particles);
+  if(clear)
+    init_grid(num_particles);
+  else if(num_particles > old_particles)
+    init_grid(num_particles - old_particles);
 }
 
-system_t::~system_t() {
-  glDeleteVertexArrays(1, &vao);
+void system_t::reset() {
+  resize(true);
 }
 
-void system_t::reset(int count) {
-  // Set the positions to a grid of particles. Reset the velocities to 0.
-  int s = (int)ceil(powf((float)params.numBodies, 1.f / 3));
-  float r = params.particleRadius;
-  init_grid(count, ivec3(s), 2 * r, .1f * r);
-}
+void system_t::init_grid(int count) {
+  int s = (int)ceil(powf((float)count, 1.f / 3));
+  float spacing = 2 * params.particleRadius;
+  float jitter = .1f * params.particleRadius;
 
-void system_t::init_grid(int count, ivec3 size, float spacing, float jitter) {
   int num_particles = params.numBodies;
-  float r = params.particleRadius;
+  int first = num_particles - count;
 
-  std::vector<vec4> pos_host(num_particles);
-  for(int z = 0, index = 0; z < size.z; ++z) {
-    for(int y = 0; y < size.y; ++y) {
-      for(int x = 0; x < size.x && index < num_particles; ++x, ++index) {
-        vec3 v(x, y, z);
-        pos_host[index] = vec4(spacing * v + r + frand3(jitter), 1);
+  float r = params.particleRadius;
+  float coef = 1.f / count;
+
+  float extent = spacing * s + jitter;
+  vec3 center = vec3(
+    (params.worldSize.x - extent) / 2,   // center in x
+     params.worldSize.y - extent,        // place at the top in y
+    (params.worldSize.z - extent) / 2    // center in z
+  ) + params.worldMin();
+
+  std::vector<vec4> pos_host(count);
+  std::vector<vec4> vel_host(count);
+  for(int z = 0, index = 0; z < s; ++z) {
+    for(int y = 0; y < s; ++y) {
+      for(int x = 0; x < s && index < count; ++x, ++index) {
+        vec3 pos = spacing * vec3(x, y, z) + r + frand(jitter) + center;
+        pos_host[index] = vec4(pos, coef * index);
       }
     }
   }
 
-  positions.set_data(pos_host);
-  velocities.clear_bytes();
+  positions.set_data_range(pos_host.data(), first, count);
+  velocities.set_data_range(vel_host.data(), first, count);
 }
 
 /*
@@ -248,6 +236,9 @@ void system_t::add_sphere(int start, int count, int r, float spacing) {
 }
 */
 void system_t::update(float deltaTime) {
+  // Check if particles have been added or removed.
+  resize();
+
   // Reorder the particles so that we can perform fast collision detection.
   sort_particles();
 
@@ -403,13 +394,15 @@ void system_t::integrate() {
     pos += vel * params.deltaTime;
 
     // Collide with the cube sides.
-    bvec3 clip_max = pos > 1 - params.particleRadius;
-    pos = clip_max ? 1 - params.particleRadius : pos;
-    vel *= clip_max ? params.boundaryDamping : 1;
-
-    bvec3 clip_min = pos < -1 + params.particleRadius;
-    pos = clip_min ? -1 + params.particleRadius : pos;
+    vec3 min = params.worldMin() + params.particleRadius;
+    bvec3 clip_min = pos < min;
+    pos = clip_min ? min : pos;
     vel *= clip_min ? params.boundaryDamping : 1;
+
+    vec3 max = params.worldMax() - params.particleRadius;
+    bvec3 clip_max = pos > max;
+    pos = clip_max ? max : pos;
+    vel *= clip_max ? params.boundaryDamping : 1;
 
     // Store updated terms.
     pos_data[index] = vec4(pos, pos4.w);
@@ -420,11 +413,28 @@ void system_t::integrate() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+inline vec3 color_ramp(float t) {
+  const int ncolors = 6;
+  const vec3 c[ncolors] {
+    1, 0, 0,
+    1, 1, 0,
+    0, 1, 0, 
+    0, 1, 1,
+    0, 0, 1, 
+    1, 0, 1,
+  };
+
+  t *= ncolors;
+  int i = (int)floor(t);
+  float u = t - i;
+
+  return mix(c[i], c[(i + 1) % ncolors], u);
+}
 
 [[spirv::vert]]
 void vert_shader() {
   vec4 pos = shader_readonly<0, vec4[]>[glvert_VertexID];
-  vec4 posEye = sim_params_ubo.view * pos;
+  vec4 posEye = sim_params_ubo.view * vec4(pos.xyz, 1);
   
   float dist = length(posEye);
   glvert_Output.PointSize = sim_params_ubo.pointRadius * 
@@ -432,7 +442,7 @@ void vert_shader() {
   glvert_Output.Position = sim_params_ubo.proj * posEye;
 
   // Pass the color through.
-  shader_out<0, vec4> = shader_in<0, vec4>;
+  shader_out<0, vec4> = vec4(color_ramp(pos.w), 1);
 }
 
 [[spirv::frag]]
@@ -468,23 +478,18 @@ struct myapp_t : app_t {
   void display() override;
   void configure();
 
-  // Host and device copies of SimParams.
-  SimParams params;
-  gl_buffer_t<const SimParams> params_ubo;
-
   // Simulation data.
   std::unique_ptr<system_t> system;
 
   // GL rendering.
   GLuint spheres_program, lines_program;
-  GLuint lines_vao;
+  GLuint spheres_vao, lines_vao;
 };
 
 
 myapp_t::myapp_t() : app_t("Particles simulation", 800, 600) { 
-
-  // camera.adjust(0, 0, .1);
-  camera.adjust(0, 0, .1);
+  camera.distance = 3;
+  camera.yaw = radians(90.f);
 
   // Create the shaders.
   GLuint vs1 = glCreateShader(GL_VERTEX_SHADER);
@@ -506,6 +511,8 @@ myapp_t::myapp_t() : app_t("Particles simulation", 800, 600) {
   glAttachShader(spheres_program, vs1);
   glAttachShader(spheres_program, fs1);
   glLinkProgram(spheres_program);
+
+  glCreateVertexArrays(1, &spheres_vao);
 
   // Render the box lines.
   lines_program = glCreateProgram();
@@ -545,11 +552,13 @@ myapp_t::myapp_t() : app_t("Particles simulation", 800, 600) {
   glVertexArrayAttribFormat(lines_vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
 
   // Initialize a system.
-  system = std::make_unique<system_t>(params);
+  system = std::make_unique<system_t>(SimParams { });
 }
 
 void myapp_t::display() {
   configure();
+
+  SimParams& params = system->params;
 
   // Set the view matrix.
   int width, height;
@@ -561,8 +570,8 @@ void myapp_t::display() {
   params.pointScale = .5f * height / tanf(params.fov * .5f);
 
   // Upload and bind the simulation parameters to UBO=1.
-  params_ubo.set_data(params);
-  params_ubo.bind_ubo(1);
+  system->params_ubo.set_data(params);
+  system->params_ubo.bind_ubo(1);
 
   // Clear the background.
   const float bg[4] { .75f, .75f, .75f, 1.0f };
@@ -577,7 +586,7 @@ void myapp_t::display() {
   
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
   glUseProgram(spheres_program);
-  glBindVertexArray(system->vao);
+  glBindVertexArray(spheres_vao);
   system->positions.bind_ssbo(0);
   
   for(int i = 1; i < 7; ++i)
@@ -588,26 +597,42 @@ void myapp_t::display() {
   glDisable(GL_PROGRAM_POINT_SIZE);
 
   // Render the box lines.
-  glDisable(GL_CULL_FACE);
   glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
   glUseProgram(lines_program);
   glBindVertexArray(lines_vao);
   glLineWidth(3.f);
   glDrawArrays(GL_LINES, 0, 24);
-  glEnable(GL_CULL_FACE);
 
   // Integrate for the next frame.
   system->update(.1);
 }
 
 void myapp_t::configure() {
+  SimParams& params = system->params;
+
   // Set ImGui to control system parameters.
   ImGui::Begin("particles simluation");
 
     ImGui::SliderInt("num bodies", &params.numBodies, 1, 65536);
+    ImGui::SliderFloat3("box size", &params.worldSize.x, .1, 3);
+    ImGui::SliderFloat("time step", &params.deltaTime, 0, 1);
 
-    if(ImGui::Button("Reset"))
-      system->reset(params.numBodies);
+
+    // ImGui::SliderFloat("gravity", &params.gravity.y, -.01, 0);
+
+    ImGui::SliderFloat("spring", &params.spring, 0, 1);
+    ImGui::SliderFloat("damping", &params.damping, 0, .1f);
+    ImGui::SliderFloat("shear", &params.shear, 0, 1);
+    ImGui::SliderFloat("attraction", &params.attraction, 0, .1);
+    ImGui::SliderFloat("boundary damping", &params.boundaryDamping, -1, 0);
+
+    if(ImGui::Button("New Cube"))
+      system->reset();
+
+    if(ImGui::Button("Reset")) {
+      system->params = SimParams();
+      system->reset();
+    }
 
   ImGui::End();
 }

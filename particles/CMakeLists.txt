@@ -13,6 +13,11 @@ set(SOURCE_FILES
   ../thirdparty/imgui/backends/imgui_impl_opengl3.cpp  
 )
 
+
+add_compile_options(
+  "$<$<CONFIG:DEBUG>:-g>"
+)
+
 set_source_files_properties(particles.cxx PROPERTIES COMPILE_FLAGS -shader)
 
 add_executable(particles ${SOURCE_FILES})
