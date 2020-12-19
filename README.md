@@ -26,6 +26,7 @@
 1. [The geometry stage](#the-geometry-stage)
 
     [![geom](images/geom_small.png)](#the-geometry-stage)
+
 1. [The tessellation stages](#the-tessellation-stages)
 
     [![teapot](images/teapot_small.png)](#the-tessellation-stages)
@@ -75,8 +76,9 @@
 
     [![particles](images/particles_small.png)](
     #compiling-cudo-code-with-c-shaders)
-  * [The particles demo](#the-particles-demo)
+
   * [Moderngpu for shaders](#moderngpu-for-shaders)
+  * [The particles demo](#the-particles-demo)
 
 1. [Shader parameters and push constants](#shader-parameters-and-push-constants)
 
@@ -2570,13 +2572,13 @@ The second executable is also 50 KB slimmer. This is the size that `stbi_load` a
 
 ## Compiling CUDA code with C++ shaders
 
-![particles](images/particles.png)
-
-[Simon Green](https://twitter.com/simesgreen)'s 2007 CUDA demo _particles_ was the first really sophisticated CUDA sample. By using a parallel to sort to order particles by their cell hashes, it required more technology than was generally available with fragment shaders at the time.
-
-GPU parallel sorts are not trivial to author. The single-source C++ model introduced with CUDA allows programmers to use templates in defining kernels, which gives sort implementations their flexibilty: key type, value type, grain size and comparators can be expressed with template parameters, allowing for a lot of customization. Domain-specific shader languages don't have the same level of generic programming support and don't interface with the host environment nearly as well, making complex, multi-pass cooperative algorithms far harder to implement.
+GPU parallel algorithms are not trivial to author. The single-source C++ model that CUDA introduced allows programmers to use templates in defining kernels, which gives sort implementations their flexibilty: key type, value type, grain size and comparators can be expressed with template parameters, allowing for a lot of customization. Domain-specific shader languages don't have the same level of generic programming support and don't interface with the host environment nearly as well, making complex, multi-pass cooperative algorithms far harder to implement.
 
 Like CUDA, Circle is a compiler frontend that lowers C++ to a GPU intermediate representation. The beauty in the design of parallel libraries like [moderngpu](https://www.github.com/moderngpu/moderngpu), [thrust](https://github.com/NVIDIA/thrust) and [CUB](https://github.com/NVIDIA/cub) is that, for performance and customization reasons, they're already highly parameterized. This has the felicitous side effect of allowing their core algorithms to be compiled using Circle to generate OpenGL/Vulkan compute shaders.
+
+> Part of the vision of Circle C++ Shaders is **write once, run anywhere**. Organize your logic into templates that abstract logic from API-specific requirements like parameter passing, resource binding and kernel dispatch. Use a compiler that emits SPIR-V, DXIR and PTX from a single C++ library. Write entry point points for OpenGL, Vulkan, D3D, CUDA and OpenCL to handle the platform-specific details. Sophisticated, cooperative GPGPU programs should be able to run on any device and any API.
+
+### Moderngpu for shaders
 
 [[**cta_merge.hxx**]](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/cta_merge.hxx)
 ```cpp
@@ -2760,15 +2762,295 @@ The candidates for substitution include the `readonly_access_t`, `writeonly_acce
 
 It's important to keep in mind that the binding index of the SSBO is _part of the iterator's type_. We can aggregate iterators into a structure, optionally give them non-zero starting indices on the host, then copy them into device memory and bind to a UBO. The resource bindings in the iterators are intended to be viral, and propagate to the aggregate, and from there to the compute shader entry point and utility functions through the mechanism of template specialization.
 
+[**kernel_merge.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/kernel_merge.hxx)
+```cpp
+template<
+  typename a_keys_it,
+  typename a_values_it,
+  typename b_keys_it,
+  typename b_values_it,
+  typename c_keys_it,
+  typename c_values_it,
+  typename comp_t>
+struct merge_params_t {
+  a_keys_it a_keys;
+  b_keys_it b_keys;
+  c_keys_it c_keys;
 
+  int spacing;           // NV * VT
+  int a_count;
+  int b_count;
 
+  // Put the potentially empty objects together to take up less space.
+  a_values_it a_vals;
+  b_values_it b_vals;
+  c_values_it c_vals;
+  comp_t comp;
+};
+```
 
+One possible aggregate type that provides arguments to the partition and merge is listed above. Since we're merging two streams into one, we need two input array members: `a_keys` and `b_keys`, and one output array member: `c_keys`. A comparator member is included to support customization (for example, when sorting strings you'd need a string-compare comparator). The lengths of each input are included as members, as well as the number of values merged per thread block, which specifies the inter-diagonal spacing for partitioning binary searches.
 
+```cpp
+  typedef merge_params_t< 
+    // A
+    readonly_iterator_t<key_t, 0>,
+    readonly_iterator_t<val_t, 4>,
 
-  * [The particles demo](#the-particles-demo)
-  * [Moderngpu for shaders](#moderngpu-for-shaders)
+    // B
+    readonly_iterator_t<key_t, 1>,
+    readonly_iterator_t<val_t, 5>,
 
+    // C
+    writeonly_iterator_t<key_t, 2>,
+    writeonly_iterator_t<val_t, 6>,
 
+    comp_t
+  > params_t;
+```
+
+The `merge_pipeline_t` class implements the user-facing interface for launching a merge operation. This class decides the policy for associating input buffers with UBO and SSBO bindings. The `merge_params_t` class template is specialized with the input and output key and value resources. The actual data is bound to the shader from the host side with `glBindBufferBase`. It's accessed on the GPU side through these specially-typed iterators.
+
+References to shader variables like UBOs and SSBOs yield ordinary C++ lvalues. These may decay to pointers and be used as pointers, as long as the pointer values don't cross the CPU-GPU interface. This capability relies on Circle's ability to optimize out pointer operations using CFG passes in the SPIR-V backend. This is a capability under development. Relying on iterators throughout the kernel is more robust.
+
+[**kernel_merge.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/kernel_merge.hxx**)
+```cpp
+template<
+  int nt, int vt, 
+  typename mp_it,
+  typename a_keys_it, typename a_vals_it,
+  typename b_keys_it, typename b_vals_it,
+  typename c_keys_it, typename c_vals_it,
+  typename comp_t
+>
+void kernel_merge(
+  mp_it mp_data,
+  a_keys_it a_keys, a_vals_it a_vals, int a_count,
+  b_keys_it b_keys, b_vals_it b_vals, int b_count,
+  c_keys_it c_keys, c_vals_it c_vals, comp_t comp) {
+
+  typedef typename std::iterator_traits<a_keys_it>::value_type key_t;
+  typedef typename std::iterator_traits<a_vals_it>::value_type val_t;
+
+  const int nv = nt * vt;
+  int tid = threadIdx.x;
+  int cta = blockIdx.x;
+ 
+  struct shared_t {
+    key_t keys[nv + 1];
+    int indices[nv];
+  };
+  [[spirv::shared]] shared_t shared;
+
+  // Load the range for this CTA and merge the values into register.
+  int mp0 = mp_data[cta + 0];
+  int mp1 = mp_data[cta + 1];
+  merge_range_t range = compute_merge_range(a_count, b_count, cta, nv, 
+    mp0, mp1);
+
+  merge_pair_t<key_t, vt> merge = cta_merge_from_mem<bounds_lower, nt, vt>(
+     a_keys, b_keys, range, tid, comp, shared.keys);
+
+  int dest_offset = nv * cta;
+  reg_to_mem_thread<nt>(merge.keys, tid, range.total(), c_keys + dest_offset,
+    shared.keys);
+  
+  if constexpr(!std::is_same_v<empty_t, val_t>) {
+    // Transpose the indices from thread order to strided order.
+    std::array<int, vt> indices = reg_thread_to_strided<nt>(merge.indices, tid, 
+      shared.indices);
+  
+    // Gather the input values and merge into the output values.
+    transfer_two_streams_strided<nt>(a_vals + range.a_begin, range.a_count(),
+      b_vals + range.b_begin, range.b_count(), indices, tid, 
+      c_vals + dest_offset);
+  }
+}
+```
+
+The partitioning kernel doesn't require communication between threads. It's _embarrassingly parallel_. Stuff gets challenging when hundreds of threads have to communicate in a low-latency, mechanical way. The merge kernel uses the results of the partitioning kernel to cooperatively merge two streams of sorted data.
+
+`kernel_merge` is moderngpu's CUDA merge kernel. The inputs and outputs were already parameterized to support data transformations like `zip_iterator` and `counting_iterator`. The only significant modification required was to change the `shared_t` type from a union to a structure. GLSL/SPIR-V doesn't support union types yet. I'm working on CFG transformation to allow compact shared memory in a SPIR-V kernel, which delivers the space-saving benefits of a union without the exact aliasing behaviors, but it isn't ready for this release. In the near future, that `struct` will go back to a `union`, and GPU occupancy when executing will kernel, bringing throughput up to par with the CUDA original.
+
+The utilites that `kernel_merge` invokes are similarly API-agnostic. There's really no additional technical challenging in having cooperative CUDA algorithms compile for shader IRs, once you're abstracting input and output sources using templates.
+
+### The particles demo
+
+![particles](images/particles.png)
+
+[Simon Green](https://twitter.com/simesgreen)'s 2007 CUDA demo _particles_ was the first really sophisticated CUDA sample. By using a parallel to sort to order particles by their cell hashes, it required more technology than was generally available with fragment shaders at the time.
+
+Rather than compute all pair-pair interactions, a quadratic cost operation, at each frame particles are quantized into cells, and those IDs are combined into a hash. The particle hash are then sorted, and particles and velocities reordered according to this hash. A cell-range data structure is built that describes the range of particles that map to each cell. With this data structure, the all-pairs interaction is reduced to a traversal of a 3x3x3 finite support domain around the cell of the particle being processed. By leveraging the sort algorithm, a quadratic-time embarrassingly parallel simulation becomes a linear-time embarrassingly parallel simulation.
+
+The high-performance [moderngpu mergesort](https://moderngpu.github.io/mergesort.html) was ported to Circle and compiles to OpenGL compute shaders in the same way the merge kernel does. 
+
+[**particles.cxx**](particles/particles.cxx)
+```cpp
+struct SimParams {
+  // Particle characteristics.
+  int   numBodies         = 30000;
+  float particleRadius    = 1.f / 64;
+
+  // Particle distribution. This world box is always centered at the origin.
+  vec3  worldSize         = vec3(2, 2, 1.5);
+  vec3  cellSize          = 0;
+  ivec3 gridSize          = 0;
+
+  // Integration.
+  vec3  gravity           = vec3(0, -.0003, 0);
+  float deltaTime         = 0.3f;
+  float globalDamping     = 1;
+
+  // Physics.
+  float spring            = 0.5f;
+  float damping           = 0.02f;
+  float shear             = 0.1f;
+  float attraction        = 0;
+  float boundaryDamping   = -0.5f;
+
+  // TODO: The wrecking ball.
+  vec3  colliderPos       = vec3(-1.2, -0.8, 0.8);
+  float colliderRadius    = 0.2f;
+
+  // Rendering parameters.
+  mat4 view               = mat4();
+  mat4 proj               = mat4();
+  float pointScale        = 0;
+  float pointRadius       = 0.0625f;
+  float fov               = radians(60.0f);
+
+  vec3 worldMin() const noexcept { return -worldSize / 2; }
+  vec3 worldMax() const noexcept { return  worldSize / 2; }
+
+  int numCells() const noexcept {
+    return gridSize.x * gridSize.y * gridSize.z;
+  }
+
+  int cellHash(ivec3 cell) const noexcept {
+    return cell.x + gridSize.x * (cell.y + gridSize.y * cell.z);
+  }
+};
+
+// Park the simulation parameters at ubo 1 and keep it there throughout the
+// frame. UBO 0 is reserved for gl_transform.
+[[using spirv: uniform, binding(1)]]
+SimParams sim_params_ubo;
+```
+
+`SimParams` was taken from Simon's original CUDA Toolkit sample. It holds simulation-wide parameters. In this rewrite of the sample, there's a local copy and a copy in an OpenGL buffer bound to UBO 1 under the name `sim_params_ubo`. All the compute and raster shaders in the program can access this constant data.
+
+```cpp
+inline vec3 collide_spheres(vec3 posA, vec3 posB, vec3 velA, vec3 velB,
+  float radiusA, float radiusB, const SimParams& params) {
+
+  vec3 relPos = posB - posA;
+  float dist = length(relPos);
+  float collideDist = radiusA + radiusB;
+
+  vec3 force { };
+  if(dist < collideDist) {
+    vec3 norm = relPos / dist;
+
+    // relative velocity.
+    vec3 relVel = velB - velA;
+
+    // relative tangential velocity.
+    vec3 tanVel = relVel - dot(relVel, relVel) * norm;
+
+    // spring force.
+    force = -params.spring * (collideDist - dist) * norm;
+    
+    // dashpot (damping) fgorce
+    force += params.damping * relVel;
+
+    // tangential shear force
+    force += params.shear * tanVel;
+
+    // attraction
+    force += params.attraction * relPos;
+  }
+
+  return force;
+}
+```
+
+The pair-interaction function `collide_spheres` implements the physics of the simulation. The function can execute on the CPU or from a shader program, because its dependence on the simulation parameters is through a reference, rather than on the `sim_params_ubo` variable directly. Not all abstraction has to be with template types; sometimes just passing references is sufficient to abstract the CPU or GPU resources that would otherwise prohibit portability.
+
+```cpp
+void system_t::sort_particles() {
+  int num_particles = params.numBodies;
+
+  // Hash particles into cells.
+  auto pos_data = positions.bind_ssbo<0>();
+  auto hash_data = cell_hash.bind_ssbo<1>();
+
+  // 1. Quantize the particles into cells. Hash the cell coordinates
+  //    into an integer.
+  mgpu::gl_transform([=](int index) {
+    vec3 pos = pos_data[index].xyz;
+    ivec3 gridPos = calcGridPos(pos, sim_params_ubo);
+    int hash = hashGridPos(gridPos, sim_params_ubo);
+
+    hash_data[index] = hash;
+
+  }, num_particles);
+
+  // 2. Sort the particles by their hash. The value of the sort is the index
+  //    of the particle.
+  sort_pipeline.sort_keys_indices(cell_hash, gather_indices, num_particles);
+
+  // 3. Reorder the particles according to their gather indices.
+  auto pos_in = positions.bind_ssbo<0>();
+  auto vel_in = velocities.bind_ssbo<1>();
+  auto hash_in = cell_hash.bind_ssbo<2>();
+  auto gather_in = gather_indices.bind_ssbo<3>();
+  auto pos_out = positions_out.bind_ssbo<4>();
+  auto vel_out = velocities_out.bind_ssbo<5>();
+
+  // Clear the ranges array because we'll never visit cells with no
+  // particles.  
+  cell_ranges.clear_bytes();
+  auto cell_ranges_out = cell_ranges.bind_ssbo<6>();
+
+  mgpu::gl_transform([=](int index) {
+    // Load the gather and hash values.
+    int gather = gather_in[index];
+    int hash = hash_in[index];
+    int hash_prev = index ? hash_in[index - 1] : -1;
+
+    // Load the particle data.
+    vec4 pos = pos_in[gather];
+    vec4 vel = vel_in[gather];
+
+    // Write the cell ranges.
+    if(hash_prev < hash) {
+      if(index) cell_ranges_out[hash_prev].y = index;
+      cell_ranges_out[hash].x = index;
+    }
+
+    if(index == sim_params_ubo.numBodies - 1)
+      cell_ranges_out[hash].y = sim_params_ubo.numBodies;
+
+    // Write the particles to memory.
+    pos_out[index] = pos;
+    vel_out[index] = vel;
+
+  }, num_particles);
+
+  // Swap the old containers with the new ones.
+  positions.swap(positions_out);
+  velocities.swap(velocities_out);
+}
+```
+
+`sort_particles` is the heart of the particles simulation. It executes three phases:
+1. Quantize the particles into cells. Hash the cell coordinates to an integer.
+2. Sort the cell hashes. Produce a gather index as value.
+3. Reorder the particles from the gather indices and produce cell ranges.
+
+Phases 1 and 3 are embarrassingly and implemented in C++ lambdas. Their closures capture iterators returned from the `gl_buffer_t::bind_ssbo` calls.
+
+Phase 2 is provided by the `mgpu::sort_pipeline_t` object. This maintains auxiliary buffers for executing the sort. Using the sort from the host is a single member function call: `sort_keys_indices`. Key and value buffers are provided and the library performs resource binding and shader dispatches.
 
 ## Shader parameters and push constants
 
