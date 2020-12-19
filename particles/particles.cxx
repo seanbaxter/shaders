@@ -8,17 +8,17 @@ using mgpu::gl_buffer_t;
 // to support shaders.
 struct SimParams {
   // Particle characteristics.
-  int   numBodies         = 16384 * 4;
+  int   numBodies         = 30000;
   float particleRadius    = 1.f / 64;
 
   // Particle distribution.
   ivec3 gridSize          = ivec3(64);
-  vec3  worldOrigin       = vec3(-1, -1, -1);
+  vec3  worldSize         = vec3(2, 2, 2);
   vec3  cellSize          = 2 * particleRadius;
 
   // Integration.
   vec3  gravity           = vec3(0, -.0003, 0);
-  float deltaTime         = 0.5f;
+  float deltaTime         = 0.3f;
   float globalDamping     = 1;
 
   // Physics.
@@ -38,6 +38,13 @@ struct SimParams {
   float pointScale        = 0;
   float pointRadius       = 0.0625f;
   float fov               = radians(60.0f);
+
+  vec3 worldMin() const noexcept {
+    return -worldSize / 2;
+  }
+  vec3 worldMax() const noexcept {
+    return worldSize / 2;
+  }
 };
 
 // Park the simulation parameters at ubo 1 and keep it there throughout the
@@ -79,7 +86,7 @@ inline vec3 collide_spheres(vec3 posA, vec3 posB, vec3 velA, vec3 velB,
 }
 
 inline ivec3 calcGridPos(vec3 p, const SimParams& params) {
-  return (ivec3)floor((p - params.worldOrigin) / params.cellSize);
+  return (ivec3)floor((p - params.worldMin()) / params.cellSize);
 }
 
 inline int hashGridPos(ivec3 p, const SimParams& params) {
@@ -195,13 +202,10 @@ void system_t::reset() {
   // Set the positions to a grid of particles. Reset the velocities to 0.
   int s = (int)ceil(powf((float)params.numBodies, 1.f / 3));
   float r = params.particleRadius;
-  init_grid(ivec3(s), 2 * r, .01f * r);
+  init_grid(ivec3(s), 2 * r, .1f * r);
 }
 
 void system_t::init_grid(ivec3 size, float spacing, float jitter) {
-
-  spacing *= .7;
-
   int num_particles = params.numBodies;
   float r = params.particleRadius;
 
@@ -216,10 +220,7 @@ void system_t::init_grid(ivec3 size, float spacing, float jitter) {
   }
 
   positions.set_data(pos_host);
-
-  vec4 zero { };
-  glClearNamedBufferSubData(velocities, GL_RGBA32F, 0, 
-    num_particles * sizeof(vec4), GL_RGBA, GL_FLOAT, &zero);
+  velocities.clear_bytes();
 }
 
 /*
@@ -274,28 +275,11 @@ void system_t::sort_particles() {
   //    of the particle.
   sort_pipeline.sort_keys_indices(cell_hash, gather_indices, num_particles);
 
-  // {
-  //   auto hash = cell_hash.get_data();
-  //   auto indices = gather_indices.get_data();
-  //   printf("%3d: %3d %3d\n", @range(), hash[:], indices[:])...;
-  //   bool is_sorted = (... && (hash[:] <= hash[1:]));
-  //   printf("hash sorted = %d\n", is_sorted);
-  // }
-
-  // auto g = gather_indices.get_data();
-  // printf("%5d: %5d\n", @range(), g[:])...;
-  // exit(0);
-
-  // 3. Reorder the particles according to their gather indices.
-
-  // Clear the ranges array because we'll never visit cells with no
+  // 3. Clear the ranges array because we'll never visit cells with no
   // particles.  
-  ivec2 zero { };
-  int cell_count = params.gridSize.x * params.gridSize.y * params.gridSize.z;
-  glClearNamedBufferSubData(cell_ranges, GL_RG32I, 0, 
-    cell_count * sizeof(ivec2), GL_RG, GL_INT, &zero);
+  cell_ranges.clear_bytes();
 
-  // Reorder the particles and fill the ranges.
+  // 4. Reorder the particles according to their gather indices.
   auto pos_in = positions.bind_ssbo<0>();
   auto vel_in = velocities.bind_ssbo<1>();
   auto hash_in = cell_hash.bind_ssbo<2>();
@@ -332,15 +316,6 @@ void system_t::sort_particles() {
   // Swap the old containers with the new ones.
   positions.swap(positions_out);
   velocities.swap(velocities_out);
-
-  // {
-  //   auto p = positions.get_data();
-  //   auto v = velocities.get_data();
-  //   for(int i = 0; i < p.size(); ++i) {
-  //     printf("%3d: %f %f %f, %f %f %f\n", 
-  //       i, p[i].x, p[i].y, p[i].z, v[i].x, v[i].y, v[i].z);
-  //   }
-  // }
 }
 
 void system_t::collide() {
@@ -387,8 +362,8 @@ void system_t::collide() {
     }
 
     // Collide with the cursor sphere.
-    // f += collide_spheres(pos, sim_params_ubo.colliderPos, vel, vec3(), r, 
-    //   sim_params_ubo.colliderRadius, sim_params_ubo);
+    f += collide_spheres(pos, sim_params_ubo.colliderPos, vel, vec3(), r, 
+      sim_params_ubo.colliderRadius, sim_params_ubo);
 
     // Integrate the velocity by the new acceleration and write out.
     vel += f * sim_params_ubo.deltaTime;
@@ -397,12 +372,6 @@ void system_t::collide() {
   }, params.numBodies);
 
   velocities.swap(velocities_out);
-
-  // std::vector<vec4> vel = velocities.get_data();
-  // for(int i = 0; i < vel.size(); ++i)
-  //   printf("%5d: %f %f %f\n", i, vel[i].x, vel[i].y, vel[i].z);
- //
-  // exit(0);
 }
 
 void system_t::integrate() {
@@ -444,17 +413,6 @@ void system_t::integrate() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct myapp_t : app_t {
-  myapp_t();
-  void display() override;
-  void configure();
-
-  SimParams params;
-  gl_buffer_t<const SimParams> params_ubo;
-
-  std::unique_ptr<system_t> system;
-  GLuint program;
-};
 
 [[spirv::vert]]
 void vert_shader() {
@@ -486,24 +444,98 @@ void frag_shader() {
   shader_out<0, vec4> = shader_in<0, vec4> * diffuse;
 }
 
+[[spirv::vert]]
+void vert_lines() {
+  vec3 v = shader_in<0, vec3>;
+  vec4 pos(mix(sim_params_ubo.worldMin(), sim_params_ubo.worldMax(), v), 1);
+  glvert_Output.Position = sim_params_ubo.proj * (sim_params_ubo.view * pos);
+}
+
+[[spirv::frag]]
+void frag_lines() {
+  shader_out<0, vec4> = 0;
+}
+
+struct myapp_t : app_t {
+  myapp_t();
+  void display() override;
+  void configure();
+
+  // Host and device copies of SimParams.
+  SimParams params;
+  gl_buffer_t<const SimParams> params_ubo;
+
+  // Simulation data.
+  std::unique_ptr<system_t> system;
+
+  // GL rendering.
+  GLuint spheres_program, lines_program;
+  GLuint lines_vao;
+};
+
+
 myapp_t::myapp_t() : app_t("Particles simulation", 800, 600) { 
 
+  // camera.adjust(0, 0, .1);
   camera.adjust(0, 0, .1);
 
   // Create the shaders.
-  GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-  GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-  GLuint shaders[] { vs, fs };
-  glShaderBinary(2, shaders, GL_SHADER_BINARY_FORMAT_SPIR_V_ARB, 
+  GLuint vs1 = glCreateShader(GL_VERTEX_SHADER);
+  GLuint fs1 = glCreateShader(GL_FRAGMENT_SHADER);
+  GLuint vs2 = glCreateShader(GL_VERTEX_SHADER);
+  GLuint fs2 = glCreateShader(GL_FRAGMENT_SHADER);
+
+  GLuint shaders[] { vs1, fs1, vs2, fs2 };
+  glShaderBinary(4, shaders, GL_SHADER_BINARY_FORMAT_SPIR_V_ARB, 
     __spirv_data, __spirv_size);
 
-  glSpecializeShader(vs, @spirv(vert_shader), 0, nullptr, nullptr);
-  glSpecializeShader(fs, @spirv(frag_shader), 0, nullptr, nullptr);
+  glSpecializeShader(vs1, @spirv(vert_shader), 0, nullptr, nullptr);
+  glSpecializeShader(fs1, @spirv(frag_shader), 0, nullptr, nullptr);
+  glSpecializeShader(vs2, @spirv(vert_lines), 0, nullptr, nullptr);
+  glSpecializeShader(fs2, @spirv(frag_lines), 0, nullptr, nullptr);
 
-  program = glCreateProgram();
-  glAttachShader(program, vs);
-  glAttachShader(program, fs);
-  glLinkProgram(program);
+  // Render the spheres.
+  spheres_program = glCreateProgram();
+  glAttachShader(spheres_program, vs1);
+  glAttachShader(spheres_program, fs1);
+  glLinkProgram(spheres_program);
+
+  // Render the box lines.
+  lines_program = glCreateProgram();
+  glAttachShader(lines_program, vs2);
+  glAttachShader(lines_program, fs2);
+  glLinkProgram(lines_program);
+
+  // VBO for the box lines.
+  const vec3 box_lines[2 * 12] {
+    // Left face edges to right face.
+    0, 0, 0, 1, 0, 0,
+    0, 0, 1, 1, 0, 1,
+    0, 1, 0, 1, 1, 0,
+    0, 1, 1, 1, 1, 1,
+
+    // Left face connections.
+    0, 0, 0, 0, 0, 1,
+    0, 0, 1, 0, 1, 1,
+    0, 1, 1, 0, 1, 0,
+    0, 1, 0, 0, 0, 0, 
+
+    // Right face connections.
+    1, 0, 0, 1, 0, 1,
+    1, 0, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 0,
+    1, 1, 0, 1, 0, 0, 
+  };  
+
+  GLuint vbo;
+  glCreateBuffers(1, &vbo);
+  glNamedBufferStorage(vbo, sizeof(box_lines), box_lines, 0);
+
+  glCreateVertexArrays(1, &lines_vao);
+  glVertexArrayVertexBuffer(lines_vao, 0, vbo, 0, sizeof(vec3));
+  glEnableVertexArrayAttrib(lines_vao, 0);
+  glVertexArrayAttribBinding(lines_vao, 0, 0);
+  glVertexArrayAttribFormat(lines_vao, 0, 3, GL_FLOAT, GL_FALSE, 0);
 
   // Initialize a system.
   system = std::make_unique<system_t>(params);
@@ -531,22 +563,32 @@ void myapp_t::display() {
   glClearBufferfv(GL_COLOR, 0, bg);
   glClear(GL_DEPTH_BUFFER_BIT);
 
+  // Render the spheres.
   // Set the context for point rendering.
   glEnable(GL_PROGRAM_POINT_SIZE);
   glDepthMask(GL_TRUE);
   glEnable(GL_DEPTH_TEST);
-
-  glUseProgram(program);
+  
+  glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+  glUseProgram(spheres_program);
   glBindVertexArray(system->vao);
   system->positions.bind_ssbo(0);
-
+  
   for(int i = 1; i < 7; ++i)
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, 0);
-
+  
   glDrawArrays(GL_POINTS, 0, params.numBodies);
-
-  glUseProgram(0);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0);
   glDisable(GL_PROGRAM_POINT_SIZE);
+
+  // Render the box lines.
+  glDisable(GL_CULL_FACE);
+  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+  glUseProgram(lines_program);
+  glBindVertexArray(lines_vao);
+  glLineWidth(3.f);
+  glDrawArrays(GL_LINES, 0, 24);
+  glEnable(GL_CULL_FACE);
 
   // Integrate for the next frame.
   system->update(.1);

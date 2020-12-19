@@ -418,7 +418,8 @@ void app_t::debug_callback(GLenum source, GLenum type, GLuint id,
   GLenum severity, GLsizei length, const GLchar* message) { 
 
   if(GL_DEBUG_SEVERITY_HIGH == severity ||
-    GL_DEBUG_SEVERITY_MEDIUM == severity)
+    GL_DEBUG_SEVERITY_MEDIUM == severity ||
+    GL_DEBUG_SEVERITY_LOW == severity)
     printf("OpenGL: %s\n", message);
 
   if(GL_DEBUG_SEVERITY_HIGH == severity)
