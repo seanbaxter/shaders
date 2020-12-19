@@ -75,7 +75,7 @@
 1. [Compiling CUDA code with C++ shaders](#compiling-cuda-code-with-c-shaders)
 
     [![particles](images/particles_small.png)](
-    #compiling-cudo-code-with-c-shaders)
+    #compiling-cuda-code-with-c-shaders)
 
   * [Moderngpu for shaders](#moderngpu-for-shaders)
   * [The particles demo](#the-particles-demo)
