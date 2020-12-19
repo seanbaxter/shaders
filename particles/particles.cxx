@@ -218,23 +218,6 @@ void system_t::init_grid(int count) {
   velocities.set_data_range(vel_host.data(), first, count);
 }
 
-/*
-void system_t::add_sphere(int start, int count, int r, float spacing) {
-  for(int z = -r, index = 0; z <= r; ++z) {
-    for(int y = -r; y <= r; ++y) {
-      for(int x = -r; x <= r && index < count; ++x) {
-        vec3 pos = spacing * vec3(x, y, z);
-        float l = length(pos);
-
-        if(l < params.particleRadius) {
-
-          ++index;
-        }
-      }
-    }
-  }
-}
-*/
 void system_t::update(float deltaTime) {
   // Check if particles have been added or removed.
   resize();
@@ -489,7 +472,7 @@ struct myapp_t : app_t {
 
 myapp_t::myapp_t() : app_t("Particles simulation", 800, 600) { 
   camera.distance = 3;
-  camera.yaw = radians(90.f);
+  // camera.yaw = radians(90.f);
 
   // Create the shaders.
   GLuint vs1 = glCreateShader(GL_VERTEX_SHADER);
@@ -616,9 +599,6 @@ void myapp_t::configure() {
     ImGui::SliderInt("num bodies", &params.numBodies, 1, 65536);
     ImGui::SliderFloat3("box size", &params.worldSize.x, .1, 3);
     ImGui::SliderFloat("time step", &params.deltaTime, 0, 1);
-
-
-    // ImGui::SliderFloat("gravity", &params.gravity.y, -.01, 0);
 
     ImGui::SliderFloat("spring", &params.spring, 0, 1);
     ImGui::SliderFloat("damping", &params.damping, 0, .1f);

@@ -222,7 +222,19 @@ struct camera_t {
   mat4 get_view() const noexcept;
   mat4 get_perspective(int width, int height) const noexcept;
 
+  vec3 x_axis() const noexcept {
+    return normalize(cross(vec3(0, 1, 0), z_axis()));
+  }
+  vec3 y_axis() const noexcept {
+    return cross(z_axis(), x_axis());
+  }
+  vec3 z_axis() const noexcept {
+    return normalize(get_eye() - origin);
+  }
+
   mat4 get_xform(int width, int height) const noexcept;
+
+  void set_from_frame(vec3 eye, vec3 xaxis, vec3 yaxis, float distance);
 };
 
 inline void camera_t::adjust(float pitch2, float yaw2, float d2) {
@@ -236,7 +248,7 @@ inline vec3 camera_t::get_eye() const noexcept {
     sin(yaw) * cos(pitch) * distance,
                sin(pitch) * distance,
     cos(yaw) * cos(pitch) * distance
-  );
+  ) + origin;
 }
 
 inline mat4 camera_t::get_view() const noexcept {
@@ -250,6 +262,18 @@ inline mat4 camera_t::get_perspective(int width, int height) const noexcept {
 
 inline mat4 camera_t::get_xform(int width, int height) const noexcept {
   return get_perspective(width, height) * get_view();
+}
+
+inline void camera_t::set_from_frame(vec3 eye, vec3 xaxis, vec3 yaxis, 
+  float distance) {
+
+  this->distance = distance;
+  vec3 zaxis = cross(xaxis, yaxis);
+  origin = eye - distance * zaxis;
+
+  eye -= origin;
+  yaw = atan2(eye.x, eye.z);
+  pitch = atan2(eye.y, length(eye.xz));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -386,7 +410,17 @@ void app_t::cursor_callback(double xpos, double ypos) {
     double dx = xpos - last_x;
     double dy = ypos - last_y;
 
-    if(GLFW_PRESS == glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT)) {
+    if(GLFW_PRESS == glfwGetKey(window, GLFW_KEY_LEFT_SHIFT)) {
+      // Translate.
+      vec3 xaxis = camera.x_axis();
+      vec3 yaxis = camera.y_axis();
+
+      vec3 eye = camera.get_eye();
+      eye += xaxis * dx / 100 - yaxis * dy / 100;
+
+      camera.set_from_frame(eye, xaxis, yaxis, camera.distance);
+
+    } else if(GLFW_PRESS == glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT)) {
       camera.adjust(0, 0, dy / 100.f);
 
     } else {
