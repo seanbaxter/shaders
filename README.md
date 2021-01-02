@@ -3264,7 +3264,11 @@ We now have two _rchit_ shaders, one for triangle geometry and one for spheres. 
 
 ![ray_tracing_tutorial](images/ray_tracing_tutorial.png)
 
-The third project I ported is [Martin-K Lefrançois's](https://twitter.com/doragonhanta) [Ray tracing tutorial](https://nvpro-samples.github.io/vk_raytracing_tutorial_KHR/). The visuals are simple, but from a shader compiler's perspective, it's the most challenging sample of the three. Unlike the other two, it doesn't implement a path tracer. The ray tracing code shoots a ray from the _rchit_ fragment at the light source as an occlusion test for shadowing, and that's the only advanced lighting feature. But the foundation for supporting multiple object files and complex scenes is supported, using Vulkan's _resource arrays_.
+The third project I ported is [Martin-K Lefrançois's](https://twitter.com/doragonhanta) [Ray tracing tutorial](https://nvpro-samples.github.io/vk_raytracing_tutorial_KHR/). 
+
+Build instructions are here: [vk_raytracing_tutorial_KHR](https://github.com/seanbaxter/vk_raytracing_tutorial_KHR/) for Circle.
+
+The visuals are simple, but from a shader compiler's perspective, it's the most challenging sample of the three. Unlike the other two, it doesn't implement a path tracer. The ray tracing code shoots a ray from the _rchit_ fragment at the light source as an occlusion test for shadowing, and that's the only advanced lighting feature. But the foundation for supporting multiple object files and complex scenes is supported, using Vulkan's _resource arrays_.
 
 Raster stages typically bind one sampler, storage image, uniform buffer or shader storage buffer per bind point. Materials are typically sorted between draw calls, so one resource per bind point is all you need.
 
