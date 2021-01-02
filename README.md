@@ -80,8 +80,8 @@
 
     [![ray_tracing1](images/ray_tracing1_small.png)](#ray-tracing-with-vulkan-rtx)
     [![ray_tracing2](images/ray_tracing2_small.png)](#ray-tracing-with-vulkan-rtx)
-    [![mini_path_tracer](images/mini_path_tracer.png)](#ray-tracing-with-vulkan-rtx)
-    [![ray_tracing_tutorial](images/ray_tracing_tutorial.png)](#ray-tracing-with-vulkan-rtx)
+    [![mini_path_tracer](images/mini_path_tracer_small.png)](#ray-tracing-with-vulkan-rtx)
+    [![ray_tracing_tutorial](images/ray_tracing_tutorial_small.png)](#ray-tracing-with-vulkan-rtx)
 
     * [Mini path-tracing tutorial](#mini-path-tracing-tutorial)
     * [Vulkan Ray Tracing in a Weekend](#vulkan-ray-tracing-in-a-weekend)
