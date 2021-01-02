@@ -1,5 +1,5 @@
 # Circle C++ shaders
-**2020 Sean Baxter ([@seanbax](https://www.twitter.com/seanbax))**
+**2021 Sean Baxter ([@seanbax](https://www.twitter.com/seanbax))**
 **[circle-lang.org](https://www.circle-lang.org/)**
 
 1. [Shader quick guide](#shader-quick-guide)
@@ -11,6 +11,7 @@
     * [Interface attributes](#interface-attributes)
 
 1. [Shaders as an embedded language](#shaders-as-an-embedded-language)
+2. 
     * [Approaching Circle shaders from GLSL](#approaching-circle-shaders-from-glsl)
     * [Approaching Circle shaders from C++](#approaching-circle-shaders-from-glsl)
     * [Approaching Circle shaders from Circle](#approaching-circle-shaders-from-circle)
@@ -44,11 +45,6 @@
     * [Specialization constants](#specialization-constants)
     * [Reflecting on specialization constants](#reflecting-on-specialization-constants)
 
-1. [Ray Tracing with Vulkan RTX](#ray-tracing-with-vulkan-rtx)
-
-    [![ray_tracing1](images/ray_tracing1_small.png)](#ray-tracing-with-vulkan-rtx)
-    [![ray_tracing2](images/ray_tracing2_small.png)](#ray-tracing-with-vulkan-rtx)
-
 1. [Reflection and attributes for Shadertoy development](#reflection-and-attributes-for-shadertoy-development)
 
     [![egg](images/egg_small.png)](#reflection-and-attributes-for-shadertoy-development)
@@ -77,8 +73,19 @@
     [![particles](images/particles_small.png)](
     #compiling-cuda-code-with-c-shaders)
 
-  * [Moderngpu for shaders](#moderngpu-for-shaders)
-  * [The particles demo](#the-particles-demo)
+    * [Moderngpu for shaders](#moderngpu-for-shaders)
+    * [The particles demo](#the-particles-demo)
+
+1. [Ray Tracing with Vulkan RTX](#ray-tracing-with-vulkan-rtx)
+
+    [![ray_tracing1](images/ray_tracing1_small.png)](#ray-tracing-with-vulkan-rtx)
+    [![ray_tracing2](images/ray_tracing2_small.png)](#ray-tracing-with-vulkan-rtx)
+    [![mini_path_tracer](images/mini_path_tracer.png)](#ray-tracing-with-vulkan-rtx)
+    [![ray_tracing_tutorial](images/ray_tracing_tutorial.png)](#ray-tracing-with-vulkan-rtx)
+
+    * [Mini path-tracing tutorial](#mini-path-tracing-tutorial)
+    * [Vulkan Ray Tracing in a Weekend](#vulkan-ray-tracing-in-a-weekend)
+    * [Nonuniform resource array access](#nonuniform-resource-array-access)
 
 1. [Vectors and matrices](#vectors-and-matrices)
 
@@ -98,9 +105,9 @@
 
 Working on this compiler has exposed _a lot_ of graphics driver bugs. The vendors test their drivers on glslang output, and glslang doesn't generate multi-shader SPIR-V modules. But Circle does, and this causes the graphics drivers to segfault or error or render incorrectly in most of the samples, if run without workarounds. 
 
-* **NVIDIA**: You must use the [Vulkan beta driver 455.26.xx](https://developer.nvidia.com/vulkan-driver) or later. It must be the beta driver. A release driver will fail in the teacups (segfault) and ray-tracing samples (no pretty pictures, just sky). The compiler itself has a workaround to prevent a segfault in the glTF sample viewer. The workarounds will be removed as driver bugs are fixed.
+* **NVIDIA**: You must use the [Vulkan beta driver 455.46.04](https://developer.nvidia.com/vulkan-driver) or later. It must be the beta driver. A release driver will fail in the teacups (segfault) and ray-tracing samples (no pretty pictures, just sky). The compiler itself has a workaround to prevent a segfault in the glTF sample viewer. The workarounds will be removed as driver bugs are fixed.
 
-* **INTEL**: Use a recent release driver. The driver fails when binding different resources to the same object within a SPIR-V module, and this breaks the teacup and shadertoy samples. Also `OpRuntimeArray` is not implemented for OpenGL which breaks nbody. Check out the [intel](https://github.com/seanbaxter/shaders/tree/intel) branch in this repository for Intel-compatible source for all the samples. Note that this branch significantly trails the master branch; namely, it lacks many of the advanced Shadertoy shaders. A bug has been filed against Mesa for this.
+* **INTEL/AMD**: Use a recent release driver. There are a number of driver bugs preventing proper execution, but I'm working to get them fixed. Check out the [intel](https://github.com/seanbaxter/shaders/tree/intel) branch in this repository for Intel-compatible source for all the samples. Note that this branch significantly trails the master branch; namely, it lacks many of the advanced Shadertoy shaders.
 
 * **AMD**: AMD on Linux is built on the same Mesa driver that Intel uses. Use the intel branch until the Mesa bugs are fixed.
 
@@ -1274,42 +1281,6 @@ This utility code uses Circle's reflection mechanism to specialize a shader give
 ```
 
 The application initializer for the glTF viewer demonstrates specialization constants.
-
-## Ray tracing with Vulkan RTX
-
-![ray_tracing1](images/ray_tracing1.png)
-![ray_tracing2](images/ray_tracing2.png)
-
-Nvidia's ray tracing extension [GLSL_nv_ray_tracing](
-https://github.com/KhronosGroup/GLSL/blob/master/extensions/nv/GLSL_NV_ray_tracing.txt) is a big chunk of work, nearly doubling the surface area of the core GLSL specification in terms of new storage classes, interface qualifiers and shader stages. The Circle shader project already supports a most features in this massive extension.
-
-Unfortunately this project only runs on a Vulkan host, not an OpenGL host. I'm not a Vulkan programmer, so I took an existing Vulkan ray tracing project, [GPSnoopy's implementation](https://github.com/GPSnoopy/RayTracingInVulkan) of Peter Shirley's [Ray Tracing in One Weekend book](https://raytracing.github.io/books/RayTracingInOneWeekend.html), stripped out all the GLSL code, and replaced it with C++ shaders. Consequently, the shaders aren't as well integrated with the host code as they are in the other examples in this repository. But they do work just fine.
-
-The ray tracing shaders are located [here](RayTracingInVulkan/src/Vulkan/RayTracing/Shaders.cpp). A second set of shaders for rasterizing each scene are [here](RayTracingInVulkan/src/Vulkan/Shaders.cpp).
-
-My implementation of the ray tracing functionality keeps pretty close to the GLSL extension, and you should consult that for guidance. But there are still a few things worth looking at more closely.
-
-```cpp
-
-inline uint RandomInt(uint& seed) {
-  // LCG values from Numerical Recipes
-  return (seed = 1664525 * seed + 1013904223); 
-}
-
-inline float RandomFloat(uint& seed) {
-  // Float version using bitmask from Numerical Recipes
-  const uint one = 0x3f800000;
-  const uint msk = 0x007fffff;
-  uint x = one | (msk & (RandomInt(seed) >> 9));
-  return *(const float*)&x - 1;
-}
-```
-
-Ray tracing uses a lot of random number generatino. `RandomInt` advances one random number to the next one. `RandomFloat` converts a `uint` to a number between 0 and 1. This requires a bitcast. GLSL provides intrinsic functions [`floatBitsToInt`](https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/floatBitsToInt.xhtml), `floatBitsToUint`, `intBitsToFloat` and `uintBitsToFloat` for bit-preserving conversion between ints and floats.
-
-Circle aims to allow users to write idiomatic C/C++. In C++, where you have pointers, you'd likely dereference a `reinterpret_cast` to affect a bit-preserving conversion between two types. GLSL can't permit this, because it doesn't have pointers. In general, the Circle shader extension doesn't support `reinterpret_cast`, because the SPIR-V target doesn't support pointers. But the Circle compiler can, and does, detect pointer usages that look like bitcasts.
-
-A `reinterpret_cast` or C-style cast between pointers to arithmetic types with the same size, followed by a dereference, applies a bitcast. This is a more template-friendly way to provide casts than the GLSL functions, while still remaining executable on a target that doesn't really support pointers.
 
 ## Reflection and attributes for Shadertoy development
 
@@ -3047,6 +3018,347 @@ Phases 1 and 3 are embarrassingly and implemented in C++ lambdas. Their closures
 
 Phase 2 is provided by the `mgpu::sort_pipeline_t` object. This maintains auxiliary buffers for executing the sort. Using the sort from the host is a single member function call: `sort_keys_indices`. Key and value buffers are provided and the library performs resource binding and shader dispatches.
 
+## Ray Tracing with Vulkan RTX
+
+Nvidia's ray tracing extension [GLSL_nv_ray_tracing](
+https://github.com/KhronosGroup/GLSL/blob/master/extensions/nv/GLSL_NV_ray_tracing.txt) is a big chunk of work, nearly doubling the surface area of the core GLSL specification in terms of new storage classes, interface qualifiers and shader stages. The Circle shader project already supports a most features in this massive extension.
+
+I ported three existing ray-tracing projects to build this capability in the Circle compiler.
+
+### Mini path-tracing tutorial
+
+![mini_path_tracer](images/mini_path_tracer.png)
+
+The simplest example is [Neil Bickford's](https://twitter.com/neilbickford) [Mini Path Tracing tutorial](https://github.com/nvpro-samples/vk_mini_path_tracer). This project includes a series of examples that bootstrap a simple path tracer, starting from a compute shader and evolving to the multi-stage Vulkan KHR ray tracing extension.
+
+This sample relies on a heavy-weight set of libraries collectively called "nvpro". For this reason, my port is maintained as a branch of that original project. Build instructions are here:
+[vk_mini_path_tracer for Circle](https://github.com/seanbaxter/vk_mini_path_tracer).
+
+Hardware ray-tracing has a much different workflow from the rasterization pipeline. Work originates with a ray generation shader (_rgen_), which is similar to a compute shader. It generates a number of ray queries per pixel, which get averaged to reduce noise, and then written to a storage image. 
+
+The generated rays pass through an _acceleration structure_ named by the ray tracing invocation. This performs bounding-box and triangle intersections. The hardware collects and sorts the results, and calls the closest-hit shader _rchit_ for rays that hit geometry, and the ray-miss shader _rmiss_ for rays that don't.
+
+The _rchit_ shader is where the interesting code goes. It's fulfills the same duty as the fragment shader--it colors pixels. But while the fragment shader is the end of the line for a rasterization pass, the _rchit_ shader is potentially recursive. You can fire off additional rays from _rchit_ to assist in coloring the fragment. For example, shooting rays from the surface to each of the light sources is an occlusion test, and determines if the fragment is in shadow or not.
+
+Path tracing uses the _rchit_ stage to compute indirect lighting on a fragment. Each surface has a material definition, which defines how rays scatters off it. This is evaluated to help guide the out-going rays from the _rchit_ stage.
+
+Material definitions are part of the intellectual property of a path tracer. The Circle C++ shader extension encourages a factorization of code into C++ classes, that are abstracted from the particularities of GLSL interface variables and the Vulkan API. We want self-contained, reusable classes that combine data and functionality, and can be called from CPU path tracers, CUDA and Optix path tracers, and shader API path tracers.
+
+[**main.cpp**](https://github.com/seanbaxter/vk_mini_path_tracer/blob/circle/checkpoints/e11_rt_pipeline_3/main.cpp)
+```cpp
+struct HitInfo {
+  vec3 objectPosition;  // The intersection position in object-space.
+  vec3 worldPosition;   // The intersection position in world-space.
+  vec3 worldNormal;     // The double-sided triangle normal in world-space.
+  vec3 rayDirection;    // Direction of incoming ray.
+  int primitiveID;
+};
+
+struct ReturnedInfo {
+  vec3 color;         // The reflectivity of the surface.
+  vec3 rayOrigin;     // The new ray origin in world-space.
+  vec3 rayDirection;  // The new ray direction in world-space.
+};
+
+// A diffuse material where the color of each triangle is determined by its
+// primitive ID (the index of the triangle in the BLAS)
+struct material7_t {
+  ReturnedInfo sample(HitInfo hit, uint& rngState) const noexcept {
+    ReturnedInfo result;
+    result.color        = clamp(vec3(hit.primitiveID) / vec3(36, 9, 18), 0.f, 1.f);
+    result.rayOrigin    = offsetPositionAlongNormal(hit.worldPosition, hit.worldNormal);
+    result.rayDirection = diffuseReflection(hit.worldNormal, rngState);
+    return result;
+  }
+};
+
+// A diffuse material with transparent cutouts arranged in slices of spheres.
+struct material8_t {
+  ReturnedInfo sample(HitInfo hit, uint& rngState) const noexcept {
+    ReturnedInfo result;
+    if(mod(length(hit.objectPosition), wavelength) >= transparency) {
+      result.color        = color;
+      result.rayOrigin    = offsetPositionAlongNormal(hit.worldPosition, hit.worldNormal);
+      result.rayDirection = diffuseReflection(hit.worldNormal, rngState);
+    } else {
+      result.color        = vec3(1.0);
+      result.rayOrigin    = offsetPositionAlongNormal(hit.worldPosition, -hit.worldNormal);
+      result.rayDirection = hit.rayDirection;
+    }
+    return result;
+  }
+
+  vec3 color = vec3(0.7);
+  float wavelength = .2f;
+  float transparency = .05;
+};
+```
+
+These two material classes take self-contained input, `HitInfo` and yield self-contained output, `ReturnedInfo`. 
+
+We can employ these classes in a number of ways. The [e10_materials](https://github.com/seanbaxter/vk_mini_path_tracer/blob/circle/checkpoints/e10_materials/main.cpp) checkpoint implements a path tracer from a compute shader but supports 9 different materials. The Circle implementation aggregates an instance of each material into a container class, `my_materials_t`:
+
+```cpp
+struct my_materials_t {
+  material0_t mat0;
+  material1_t mat1;
+  material2_t mat2;
+  material3_t mat3;
+  material4_t mat4;
+  material5_t mat5;
+  material6_t mat6;
+  material7_t mat7;
+  material8_t mat8;
+};
+```
+
+An instance of this can be bound to a UBO, allowing the data members of each material to be controlled by the application. Alternatively, we can instantiate the collection in the compute shader itself, exposing the default member initializers as constants to the shader compiler's backend.
+
+```cpp
+        switch(sbtOffset) {
+          @meta for(int i = 0; i < @member_count(materials_t); ++i) {
+            case i:
+              returnedInfo = mat.@member_value(i).sample(hitInfo, rngState);
+              break;
+          }
+        }
+```
+
+We reflect over the members of `materials_t` to generate a switch statement with a case for each material. This preserves the idea having a _single point of definition_ for the materials, namely the collection `materials_t`. This type becomes a manifest for the path shader. We can add or remove materials from that type, and both the shader and host code follows suit.
+
+[**main.cpp**](https://github.com/seanbaxter/vk_mini_path_tracer/blob/circle/checkpoints/e11_rt_pipeline_3/main.cpp)
+```cpp
+template<typename material_t>
+[[spirv::rchit]]
+void rchit_shader() {
+  HitInfo hitInfo = getObjectHitInfo();
+  
+  material_t mat;
+  ReturnedInfo returned = mat.sample(hitInfo, shader_pld_in.rngState);
+  
+  shader_pld_in.color        = returned.color;
+  shader_pld_in.rayOrigin    = returned.rayOrigin;
+  shader_pld_in.rayDirection = returned.rayDirection;
+  shader_pld_in.rayHitSky    = false;
+}
+```
+
+When the full multi-stage ray tracing pipeline is adopted, the device will sort ray intersections by the shader-binding table ID of the facet it struck. Accordingly, there will be a different _rchit_ shader for each material. This gets around the execution divergence of the compute-shader implementation, which struggles mightily as the number of materials in the scene increases.
+
+An _rchit_ shader function template is defined and specialized over each of the materials in the scene. The `sample` member function is called, and the result is stored in the ray payload, which gets delivered back to the _rchit_ or _rgen_ stage that issued the ray.
+
+```cpp
+enum typename my_materials_t {
+  material0_t,
+  material1_t,
+  material2_t,
+  material3_t,
+  material4_t,
+  material5_t,
+  material6_t,
+  material7_t,
+  material8_t,
+};
+```
+```cpp
+    // Stages 2 through the end will be closest-hit shaders.
+    @meta for(int i = 0; i < NUM_C_HIT_SHADERS; ++i) {
+      stages[2 + i] = stages[0];
+      stages[2 + i].stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+      stages[2 + i].pName = @spirv(rchit_shader<@enum_type(my_materials_t, i)>);
+    }
+```
+
+In this example, a typed enum is used to collect all the scene's materials. The host code that sets up the Vulkan ray tracing pipeline enters a compile-time loop (meta for) to visit each enumerator in `my_materials_t` and instantiate the generic `rich_shader` function template over it. As with the compute shader example, we can add and subtract materials from the scene simply by modying the list of them in the manifest type.
+
+This mini path tracer tutorial uses the [GLSL_EXT_ray_tracing](https://github.com/KhronosGroup/GLSL/blob/master/extensions/ext/GLSL_EXT_ray_tracing.txt) extension, which is the main collection of hardware ray-tracing primitives. This is the full-fat experience, where ray tracing operations spawn new shader launches, which can recursively generate more rays. Dynamic shaders are registered in  _shader binding table_.
+
+The tutorial also features declarations from [GLSL_EXT_ray_query](https://github.com/KhronosGroup/GLSL/blob/master/extensions/ext/GLSL_EXT_ray_query.txt). This extension exposes ray tracing hardware without requiring developers to adopt the dynamic shader model.
+
+[**e10_materials/main.cpp**](https://github.com/seanbaxter/vk_mini_path_tracer/blob/circle/checkpoints/e10_materials/main.cpp)
+```cpp
+    // Limit the kernel to trace at most 32 segments.
+    for(int tracedSegments = 0; tracedSegments < 32; tracedSegments++) {
+      // Trace the ray and see if and where it intersects the scene!
+      // First, initialize a ray query object:
+      gl_rayQuery rayQuery;
+      gl_rayQueryInitialize(rayQuery,              // Ray query
+                            shader_tlas,           // Top-level acceleration structure
+                            gl_RayFlagsOpaque,     // Ray flags, here saying "treat all geometry as opaque"
+                            0xFF,                  // 8-bit instance mask, here saying "trace against all instances"
+                            rayOrigin,             // Ray origin
+                            0.0,                   // Minimum t-value
+                            rayDirection,          // Ray direction
+                            10000.0);              // Maximum t-value
+      while(gl_rayQueryProceed(rayQuery));
+
+      // Get the type of committed (true) intersection - nothing, a triangle, or
+      // a generated object
+      if(gl_rayQueryGetIntersectionType(rayQuery, true) == 
+        gl_RayQueryCommittedIntersectionTriangle) {
+
+        // Get the ID of the shader:
+        const int sbtOffset = gl_rayQueryGetIntersectionInstanceShaderBindingTableRecordOffset(rayQuery, true);
+
+        // Ray hit a triangle
+        HitInfo hitInfo = getObjectHitInfo(rayQuery);
+        ReturnedInfo returnedInfo { };
+
+        // Accumulate a color.
+        ...
+      }
+    }
+```
+
+This code is contained in a compute shader, and execution never leaves the compute shader. `gl_rayQueryProceed` (which is the Circle name for `rayQueryProceedEXT`) advances the ray until it hits a surface, at which point it returns _false_. The shading binding table offset for the struck facet is accessed with `gl_rayQueryGetIntersectionInstanceShaderBindingTableRecordOffset`. In full ray-tracing pipeline, the _rchit_ shader registered at that index would be called.
+
+From here, execution resembles an _rchit_ shader. GLSL_EXT_ray_query provides analogs to GLSL_EXT_ray_tracing variables that identify the exact primitive intersected.
+
+The ray query extension allows shader developers to dip their toe in the pool, and add ray tracing features into compute shaders, gaining experience without having to adopt the full recursive dynamic shader programming model.
+
+### Vulkan Ray Tracing in a Weekend
+
+![ray_tracing1](images/ray_tracing1.png)
+![ray_tracing2](images/ray_tracing2.png)
+
+I took an existing Vulkan ray tracing project, [GPSnoopy's implementation](https://github.com/GPSnoopy/RayTracingInVulkan) of Peter Shirley's [Ray Tracing in One Weekend book](https://raytracing.github.io/books/RayTracingInOneWeekend.html), stripped out all the GLSL code, and replaced it with C++ shaders. This example produces stunning images with a small amount of code.
+
+The ray tracing shaders are located [here](https://github.com/seanbaxter/RayTracingInVulkan/src/Vulkan/RayTracing/Shaders.cpp). A second set of shaders for rasterizing each scene are [here](https://github.com/seanbaxter/RayTracingInVulkan/src/Vulkan/Shaders.cpp).
+
+[**Shaders.cpp**](https://github.com/seanbaxter/RayTracingInVulkan/blob/circle/src/Vulkan/RayTracing/Shaders.cpp)
+```cpp
+[[spirv::rint]]
+void rint_sphere() {
+  vec4 sphere = Spheres[glray_InstanceCustomIndex];
+  vec3 center = sphere.xyz;
+  float radius = sphere.w;
+
+  vec3 origin = glray_WorldRayOrigin;
+  vec3 dir = glray_WorldRayDirection;
+  float tMin = glray_Tmin;
+  float tMax = glray_Tmax;
+
+  vec3 oc = origin - center;
+  float a = dot(dir, dir);
+  float b = dot(oc, dir);
+  float c = dot(oc, oc) - radius * radius;
+  float discriminant = b * b - a * c;
+
+  float t1 = (-b - sqrt(discriminant)) / a;
+  float t2 = (-b + sqrt(discriminant)) / a;
+
+  bool b1 = tMin <= t1 && t1 < tMax;
+  bool b2 = tMin <= t2 && t2 < tMax;
+  if(discriminant >= 0 && (b1 || b2)) {
+    SphereHit = sphere;
+    gl_reportIntersection(b1 ? t1 : t2, 0);
+  }
+}
+```
+
+This example adds a layer of sophistication beyond the mini path tracer example: non-triangular geometry. Vulkan ray tracing has built-in support for intersecting rays with triangles. To intersect rays with procedural geometry, supply your own ray intersection shader. The `rint_sphere` shader tests a ray against procedural geometry identified by `glray_InstanceCustomIndex`. If the ray intersections the geometry, the closest hit is returned with `gl_reportIntersection`.
+
+We now have two _rchit_ shaders, one for triangle geometry and one for spheres. These two shaders draw from the same material definitions, but compute their normals differently. For triangles, vertex normals are linearly interpolated using the barycentric coordinates of the intersection. For spheres, the analytical form is used.
+
+### Nonuniform resource array access
+
+![ray_tracing_tutorial](images/ray_tracing_tutorial.png)
+
+The third project I ported is [Martin-K Lefrançois's](https://twitter.com/doragonhanta) [Ray tracing tutorial](https://nvpro-samples.github.io/vk_raytracing_tutorial_KHR/). The visuals are simple, but from a shader compiler's perspective, it's the most challenging sample of the three. Unlike the other two, it doesn't implement a path tracer. The ray tracing code shoots a ray from the _rchit_ fragment at the light source as an occlusion test for shadowing, and that's the only advanced lighting feature. But the foundation for supporting multiple object files and complex scenes is supported, using Vulkan's _resource arrays_.
+
+Raster stages typically bind one sampler, storage image, uniform buffer or shader storage buffer per bind point. Materials are typically sorted between draw calls, so one resource per bind point is all you need.
+
+But ray tracing is incoherent. You don't know what objects a ray will strike, so they all need to be accessible, in some form, to the shader. The application can load each model into its own set of buffers and textures, and manage those memory resources independently. 
+
+[VkWriteDescriptorSet](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkWriteDescriptorSet.html) sets a descriptor binding to a range of buffer or image objects. In this ray tracing example, each buffer may hold vertex information for a different model, and each texture may hold material data for a different model.
+
+The binding model makes sense, but accessing resource arrays in a shader is error-prone. When performing a [dynamically-nonuniform subscript](https://developer.nvidia.com/blog/improved-glsl-syntax-vulkans-descriptorset-indexing/) of a resource array, GLSL requires you modify the subscript expression with the [`nonuniformEXT`](https://github.com/KhronosGroup/GLSL/blob/master/extensions/ext/GL_EXT_nonuniform_qualifier.txt). Failing to do so is undefined behavior, and may produce rendering artiacts.
+
+A dynamically-nonuniform access is when different lanes within a block access different resource array elements. In ray tracing, where rays scatter incoherently all across the scene, there's a high chance that neighboring lanes intersect different objects. Rather than requiring the user to insert `nonuniformEXT` at all dynamically-nonuniform subscripts, Circle inserts the `NonUniform` SPIR-V decoration implicitly and automatically. A heuristic is run by the compiler's code generator to see if it can drop the decorator. Constants and loads from UBOs, push constants and read-only images and SSBOs are inherently uniform. Arithmetic on uniform terms is itself uniform. When the subscript expression is uniform, the decoration is not emitted. This provides high-performance for uniform access while defaulting to a more robust mechanism than GLSL.
+
+[**raytrace.cxx**](https://github.com/seanbaxter/vk_raytracing_tutorial_KHR/blob/circle/ray_tracing__simple/raytrace.cxx)
+```cpp
+[[using spirv: uniform, binding(0), set(1)]]
+camera_t cam;
+
+[[using spirv: buffer, binding(1), set(1)]]
+struct [[spirv::block]] {
+  WaveFrontMaterial m[];
+} materials[];
+
+[[using spirv: buffer, binding(2), set(1)]]
+SceneDesc sceneDescs[];
+
+[[using spirv: uniform, binding(3), set(1)]]
+sampler2D textureSamplers[];
+
+[[using spirv: buffer, binding(4), set(1)]]
+struct [[spirv::block]] {
+  int i[];
+} matIndices[];
+```
+
+Circle C++ shaders uses a simpler syntax for defining interface variables than GLSL. To declare a UBO or SSBO of a given type, just write the type. If the UBO or SSBO holds an array type, write that array type. `cam` is a UBO of type `camera_t`. `sceneDescs` is a single UBO with a runtime-array of type `SceneDesc`.
+
+```cpp
+// GLSL
+layout(binding=1, set=2)
+buffer MyBuffer {
+  WaveFrontMaterial m[];
+} materials[];
+
+// Equivalent C++
+[[using spirv: buffer, binding(1), set(2)]]
+struct [[spirv::block]] {
+  WaveFrontMaterial m[];
+} materials[];
+```
+
+To create a _buffer resource array_, where multiple buffers are associated with a single UBO or SSBO binding, define the contents of a single element inside a `[[spirv::block]]`-decorated structure, then declare an array of that block type.
+
+```cpp
+// GLSL
+layout(binding=3, set=1)
+uniform sampler2D textureSamplers[];
+
+// Equivalent C++
+[[using spirv: uniform, binding(3), set(1)]]
+sampler2D textureSamplers[];
+```
+
+Image and sampler arrays arrays are always resource array types, supporting multiple resources attached to a single descriptor binding.
+
+[**raytrace.cxx**](https://github.com/seanbaxter/vk_raytracing_tutorial_KHR/blob/circle/ray_tracing__simple/raytrace.cxx)
+```cpp
+[[spirv::rchit]]
+void rchit_shader() {
+  // Object of this instance.
+  SceneDesc desc = sceneDescs[glray_InstanceCustomIndex];
+  int objId = desc.objId;
+
+  mat4 transfo(desc.transfo);
+  mat4 transfoIT(desc.transfoIT);
+
+  // Get the push constants.
+  Constants constants = shader_push<Constants>;
+
+  // Note that nonuniformEXT is implicitly added by Circle when using a 
+  // dynamic non-uniform index into a resource array.
+  int indx = indices[objId].i[3 * glray_PrimitiveID + 0];
+  int indy = indices[objId].i[3 * glray_PrimitiveID + 1];
+  int indz = indices[objId].i[3 * glray_PrimitiveID + 2];
+
+  Vertex v0 = vertices[objId].v[indx];
+  Vertex v1 = vertices[objId].v[indy];
+  Vertex v2 = vertices[objId].v[indz]; 
+
+  ...
+```
+
+This raytrace tutorial sample supports rendering multiple objects each with multiple triangles. Inside the shader, the object entity is accessed through `glray_InstanceCustomIndex`. The `sceneDescs` array at this location yields the transformation matrix to bring the model from model space into world space.
+
+Accessing the triangle's vertex information requires nonuniform loads. There is a separate index array for each object. The `indices[objId]` subscript is implicitly dynamically-nonuniform, because it is an index into a buffer resource array with a data-dependent subscript. The compiler automatically marks this access as `NonUniform`. Access into the `vertices` array is also nonuniform on the object ID. Note that the second part of the accesses, over `glray_PrimitiveID` and `indx`, respectively, while certainly nonuniform (they're data dependent), don't require any special decoration, as they are accessing different elements within a buffer rather, than different buffers within a multi-buffer descriptor binding.
+
 ## Vectors and matrices
 
 gcc has builtin vector types to serve as containers for SIMD instructions. But they're not richly featured, and won't serve the needs of shader programmers. The Circle compiler extends the vector types for feature parity with GLSL, while opting for initializer syntax that is idiomatic C++. Builtin matrix types are also available.
@@ -3164,6 +3476,26 @@ vec4 array[] {
 You can construct vectors from both scalars and smaller vectors. This initialization style extends to aggregates: when initializing an array of vecN, N scalars at a time are assigned to each array element.
 
 When a vector constructor is only provided a single scalar argument, that scalar performs a "splat" initialization of the vector, setting all elements equal to it. Vectors implicitly converted from scalars are also splat initialized.
+
+```cpp
+vec3 v(5);        // (5, 5, 5)
+```
+
+Initializing a matrix on a single scalar argument sets its off-diagonal elements to 0 and splats that argument to the diagonal.
+
+```cpp
+mat2 m(3);        // (1, 0, 0, 1)
+```
+
+You can load vectors and matrices from a pointer to data of its scalar type. This is slightly different from casting data to a pointer to the vector/matrix type and dereferencing it, as that requires data be vector/matrix-aligned, whereas the pointer initializer only requires scalar-alignment.
+
+```cpp
+float x[4];
+vec4 v(x);
+
+float y[16];
+mat4 m(y);
+```
 
 ### Element-wise vector operations
 
@@ -3302,7 +3634,6 @@ There are many features in development:
 
 * More shader extensions:
     1. `OVR_multiview` for faster stereo head-mounted display rendering.
-    2. Shader printf with `NonSemantic.DebugPrintf`
 
 * Separated samplers/textures. (Vulkan only.)
 * Subpass inputs. (Vulkan only.)
