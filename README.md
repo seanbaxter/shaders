@@ -11,7 +11,7 @@
     * [Interface attributes](#interface-attributes)
 
 1. [Shaders as an embedded language](#shaders-as-an-embedded-language)
-2. 
+
     * [Approaching Circle shaders from GLSL](#approaching-circle-shaders-from-glsl)
     * [Approaching Circle shaders from C++](#approaching-circle-shaders-from-glsl)
     * [Approaching Circle shaders from Circle](#approaching-circle-shaders-from-circle)
