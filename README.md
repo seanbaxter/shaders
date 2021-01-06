@@ -90,7 +90,7 @@
 1. [The mesh shader pipeline](#the-mesh-shader-pipeline)
 
     [![meshlet1](images/meshlet1_small.png)](#the-mesh-shader-pipeline)
-    [![meshlet2](images/meshlet2_small.png)](#the-mesh-shader-pipeline)
+    [![meshlet2](images/meshlet2_small2.png)](#the-mesh-shader-pipeline)
 
     * [The meshlet cadscene sample](#the-meshlet-cadscene-sample)
 
