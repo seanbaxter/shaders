@@ -87,6 +87,13 @@
     * [Vulkan Ray Tracing in a Weekend](#vulkan-ray-tracing-in-a-weekend)
     * [Nonuniform resource array access](#nonuniform-resource-array-access)
 
+1. [The mesh shader pipeline](#the-mesh-shader-pipeline)
+
+    [![meshlet1](images/meshlet1_small.png)](#the-mesh-shader-pipeline)
+    [![meshlet2](images/meshlet2_small.png)](#the-mesh-shader-pipeline)
+
+    * [The meshlet cadscene sample](#the-meshlet-cadscene-sample)
+
 1. [Vectors and matrices](#vectors-and-matrices)
 
     * [Vector swizzle](#vector-swizzle)
@@ -108,8 +115,6 @@ Working on this compiler has exposed _a lot_ of graphics driver bugs. The vendor
 * **NVIDIA**: You must use the [Vulkan beta driver 455.46.04](https://developer.nvidia.com/vulkan-driver) or later. It must be the beta driver. A release driver will fail in the teacups (segfault) and ray-tracing samples (no pretty pictures, just sky). The compiler itself has a workaround to prevent a segfault in the glTF sample viewer. The workarounds will be removed as driver bugs are fixed.
 
 * **INTEL/AMD**: Use a recent release driver. There are a number of driver bugs preventing proper execution, but I'm working to get them fixed. Check out the [intel](https://github.com/seanbaxter/shaders/tree/intel) branch in this repository for Intel-compatible source for all the samples. Note that this branch significantly trails the master branch; namely, it lacks many of the advanced Shadertoy shaders.
-
-* **AMD**: AMD on Linux is built on the same Mesa driver that Intel uses. Use the intel branch until the Mesa bugs are fixed.
 
 ### Compiling the samples
 
@@ -339,6 +344,8 @@ Shaders stages are distinguished by a shader attribute. Interface variables are 
 * `[[spirv::callableData]]`
 * `[[spirv::callableDataIn]]`
 * `[[spirv::shaderRecord]]` - Ray tracing storage classes. See [GLSL_nv_ray_tracing](https://github.com/KhronosGroup/GLSL/blob/master/extensions/nv/GLSL_NV_ray_tracing.txt).
+* `[[spirv::perTaskOut]]` - Outgoing payload from task shader into mesh shader. See [GLSL_nv_mesh_shader](https://github.com/KhronosGroup/GLSL/blob/master/extensions/nv/GLSL_NV_mesh_shader.txt)
+* `[[spirv::perTaskIn]]` - Incoming payload to mesh shader from task shader.
 * `[[spirv::constant(index)]]` - Specialization constant or structure of specialization constants. The index is equivalent to GLSL's `constant_id`. This is not technically a storage class. See [Specialization constants](#specialization-constants).
 
 In addition to the storage class attributes, GLSL includes a number of layout qualifiers:
@@ -346,8 +353,8 @@ In addition to the storage class attributes, GLSL includes a number of layout qu
 * `[[spirv::component(index)]]` - Specifies a component within a shader stage `in` or `out` attribute. This allows packing multiple scalars or small vectors inside the `vec4` layout for shader stage atrtibutes. 
 * `[[spirv::binding(index)]]` - Binding location for uniform buffers, storage buffers, images, textures and samplers.
 * `[[spirv::set(index)]]` - Descriptor set that may optionally be provided with `spirv::binding`. Vulkan only.
-* `[[spirv::perTask]]` - See [GLSL_nv_mesh_shader](https://github.com/KhronosGroup/GLSL/blob/master/extensions/nv/GLSL_NV_mesh_shader.txt)
 * `[[spirv::format(format)]]` - A compatible internal format for image buffers. Must be a value from the `gl_format_t` enumeration: 
+* `[[spirv::invocations(count)]]` - The number of times to invoke the geometry shader. `glgeom_InvocationID` specifies the particular instance.
 
 ```cpp
 enum class gl_format_t : unsigned {
@@ -3362,6 +3369,118 @@ void rchit_shader() {
 This raytrace tutorial sample supports rendering multiple objects each with multiple triangles. Inside the shader, the object entity is accessed through `glray_InstanceCustomIndex`. The `sceneDescs` array at this location yields the transformation matrix to bring the model from model space into world space.
 
 Accessing the triangle's vertex information requires nonuniform loads. There is a separate index array for each object. The `indices[objId]` subscript is implicitly dynamically-nonuniform, because it is an index into a buffer resource array with a data-dependent subscript. The compiler automatically marks this access as `NonUniform`. Access into the `vertices` array is also nonuniform on the object ID. Note that the second part of the accesses, over `glray_PrimitiveID` and `indx`, respectively, while certainly nonuniform (they're data dependent), don't require any special decoration, as they are accessing different elements within a buffer rather, than different buffers within a multi-buffer descriptor binding.
+
+## The mesh shader pipeline
+
+The [GLSL_NV_mesh_shader](https://github.com/KhronosGroup/GLSL/blob/master/extensions/nv/GLSL_NV_mesh_shader.txt) extension, implemented on NVIDIA Turing and Ampere devices, provides an alternative set of vertex-processing stages for rasterization. The old sequence of vertex->control->evaluation->geometry->fragment is replaced by task->mesh->fragment. Get an overview [here](https://developer.nvidia.com/blog/introduction-turing-mesh-shaders/).
+
+The two new shader stages are compute shaders with attached queues. Each workgroup in the task shader emits a task count and data for each task. The fixed-function part of the pipeline performs a prefix sum on the task counts, and dynamically launches a mesh shader grid, with one workgroup per task. In HLSL, the task stage is called "amplification", because it amplifies tasks into full compute shader workgroups.
+
+### The meshlet cadscene sample
+
+![meshlet1](images/meshlet1.png)
+![meshlet2](images/meshlet2.png)
+
+I forked [Christoph Kubisch](https://twitter.com/pixeljetstream)'s **[Vulkan meshlet cadscene sample](https://github.com/nvpro-samples/gl_vk_meshlet_cadscene/)** into this [Circle branch](https://github.com/seanbaxter/gl_vk_meshlet_cadscene/tree/circle). The program was simplified by removing some options, all GLSL was removed, and the shaders were re-written with Circle's C++ shaders extension.
+
+[**mesh_shaders.cxx**](https://github.com/seanbaxter/gl_vk_meshlet_cadscene/blob/circle/mesh_shaders.cxx)
+```cpp
+struct Task {
+  uint baseID;
+  uint8_t subIDs[GROUP_SIZE];
+};
+
+[[spirv::perTaskOut]] Task taskOut;
+[[spirv::perTaskIn]] Task taskIn;
+
+[[using spirv: task, local_size(GROUP_SIZE)]]
+void task_shader() {
+  uint baseID = glcomp_WorkGroupID.x * GROUP_SIZE;
+  uint laneID = glcomp_LocalInvocationID.x;
+
+  baseID += push.assigns.x;
+  uvec4 desc = meshletDescs[min(baseID + laneID, push.assigns.y) + 
+    push.geometryOffsets.x];
+
+  bool render = !(baseID + laneID > push.assigns.y || earlyCull(desc, object));
+  
+  uvec4 vote  = gl_subgroupBallot(render);
+  uint  tasks = gl_subgroupBallotBitCount(vote);
+  uint  voteGroup = vote.x;
+
+  if (laneID == 0) {
+    glmesh_TaskCount = tasks;
+    taskOut.baseID = baseID;
+  }
+
+  uint idxOffset = gl_subgroupBallotExclusiveBitCount(vote);
+
+  if (render)
+    taskOut.subIDs[idxOffset] = laneID;
+}
+```
+
+Like many compute shaders, the task/amplification shader uses a prefix sum to generate work itmes. Each thread in the task shader loads the bounding box for a different meshlet. The bounding box is culled against the view frustum, and in this sample, against user-adjustable clipping planes. 
+
+If the meshlet is not culled, it is rendered by generating a task for the subsequent mesh shader stage. Each thread submits its render bit to `gl_subgroupBallot`, a warp-synchronous instruction which combines the flags from each lane and returns them in a single value. The OpenGL/Vulkan subgroup extension supports subgroups up to 128 lanes, which is why the result object is a uvec4: it needs 128 bits. (The subgroup is 32 lanes wide on NVIDIA and 64 lanes wide on AMD hardware.)
+
+`gl_subgroupBallotBitCount` and `gl_subgroupBallotExclusiveBitCount` are misleadingly named, as they aren't actually warp-synchronous instructions. The former intrinsic counts the number of set bits in its operand, which is a reduction yielding the number of meshlets this block is forwarding to the mesh shader. The latter intrinsic performs an exclusive prefix sum on the operand, yielding the total number of bits set that occur prior to the lane submitting the request. This compresses task shader lanes that have meshlets to render, filtering out those with meshlets that are culled.
+
+```cpp
+template<int vert_count, int prim_count, bool clip_primitives>
+[[using spirv:
+  mesh(triangles, vert_count, prim_count), 
+  local_size(GROUP_SIZE)
+]]
+void mesh_shader() {
+  constexpr int vert_runs = div_up(vert_count, GROUP_SIZE);
+  constexpr int index_runs = div_up(3 * prim_count, 8 * GROUP_SIZE);
+
+  uvec4 geometryOffsets = shader_push<uvec4>;
+
+  uint meshletID = taskIn.baseID + taskIn.subIDs[glcomp_WorkGroupID.x];
+  uint laneID = glcomp_LocalInvocationID.x;
+
+  // decode meshletDesc
+  uvec4 desc = meshletDescs[meshletID + geometryOffsets.x];
+  meshlet_t meshlet = decodeMeshlet(desc);
+```
+
+The `spirv::perTaskOut` storage class provisions memory for detailing each task scheduled by the task shader. A view into the same memory is declared on the mesh shader side with the `spirv::perTaskIn` storage class. Each task generated by the task shader, through the `glmesh_TaskCount` declaration, causes the dispatch of one block in the mesh shader grid, identified by `glcomp_WorkGroupID.x`. The workgroup ID is used to index into the per-task data between these shader stages. The lane ID `glcomp_LocalInvocationID.x` is used to cooperatively stream geometry out of the mesh shader and into the vertex queue.
+
+```cpp
+template<int vert_count, bool clip_primitives>
+vec4 procVertex(uint vert, uint vidx, uint meshletID) {
+  // Stream the vertex position.
+  vec3 oPos = texelFetch(texVbo, vidx).xyz;
+  vec3 wPos = (object.worldMatrix  * vec4(oPos,1)).xyz;
+  vec4 hPos = (scene.viewProjMatrix * vec4(wPos,1));
+  
+  vec3 oNormal = texelFetch(texAbo, vidx).xyz;
+  vec3 wNormal = mat3(object.worldMatrixIT) * oNormal;
+
+  glmesh_Output[vert].Position = hPos;
+
+  Vertex vertex { };
+  vertex.pos = wPos;
+  vertex.dummy = 0;
+  vertex.normal = wNormal;
+  vertex.meshletID = meshletID;
+  shader_out<0, Vertex[vert_count]>[vert] = vertex;
+  
+  // Perform clipping against user clip planes.
+  if constexpr(clip_primitives) {
+    glmesh_Output[vert].ClipDistance[0] = dot(scene.wClipPlanes[0], vec4(wPos,1));
+    glmesh_Output[vert].ClipDistance[1] = dot(scene.wClipPlanes[1], vec4(wPos,1));
+    glmesh_Output[vert].ClipDistance[2] = dot(scene.wClipPlanes[2], vec4(wPos,1));
+  }
+
+  return hPos;
+}
+```
+
+`procVertex` is responsible for streaming geometry from the mesh shader to GPU's triangle setup engine. The `shader_out` variable template is specialized on a `Vertex` array, which is sized to the max number of vertices per block for this sample (126 primitives). These four terms are interpolated by the GPU and recovered by the fragment shader as `in` parameters and rasterized.
+
 
 ## Vectors and matrices
 

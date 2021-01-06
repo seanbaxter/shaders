@@ -1,3 +1,11 @@
+#include "implicit.hxx"
+#include "../fe/grammar.hxx"
+
+BEGIN_SEMA_NAMESPACE
+
+using fe::range_t;
+
+const char* spirv_pre = R"text(
 #ifdef SPIRV_IMPLICIT_NAMESPACE
 namespace SPIRV_IMPLICIT_NAMESPACE {
 #endif
@@ -453,8 +461,21 @@ GLSL_PREFIX bvec2  [[spirv::opcode(157)]] isinf(dvec2  a) noexcept { return __ve
 GLSL_PREFIX bvec3  [[spirv::opcode(157)]] isinf(dvec3  a) noexcept { return __vector_apply(__builtin_isinf,  a); }
 GLSL_PREFIX bvec4  [[spirv::opcode(157)]] isinf(dvec4  a) noexcept { return __vector_apply(__builtin_isinf,  a); }
 
-// https://www.khronos.org/registry/OpenGL/specs/gl/GLSLangSpec.4.60.html#geometric-functions
+// https://www.khronos.org/registry/OpenGL/specs/gl/GLSLangSpec.4.60.html#floating-point-pack-and-unpack-functions
+GLSL_PREFIX uint  [[spirv::GLSLstd450(54)]]   packSnorm4x8(vec4 v) noexcept;
+GLSL_PREFIX uint  [[spirv::GLSLstd450(55)]]   packUnorm4x8(vec4 v) noexcept;
+GLSL_PREFIX uint  [[spirv::GLSLstd450(56)]]   packSnorm2x16(vec2 v) noexcept;
+GLSL_PREFIX uint  [[spirv::GLSLstd450(57)]]   packUnorm2x16(vec2 v) noexcept;
+GLSL_PREFIX uint  [[spirv::GLSLstd450(58)]]   packHalf2x16(vec2 v) noexcept;
+GLSL_PREFIX vec2  [[spirv::GLSLstd450(59)]]   packDouble2x32(uvec2 v) noexcept;
+GLSL_PREFIX vec2  [[spirv::GLSLstd450(60)]] unpackSnorm2x16(uint p) noexcept;
+GLSL_PREFIX vec2  [[spirv::GLSLstd450(61)]] unpackUnorm2x16(uint p) noexcept;
+GLSL_PREFIX vec2  [[spirv::GLSLstd450(62)]] unpackHalf2x16(uint p) noexcept;
+GLSL_PREFIX vec4  [[spirv::GLSLstd450(63)]] unpackSnorm4x8(uint p) noexcept;
+GLSL_PREFIX vec4  [[spirv::GLSLstd450(64)]] unpackUnorm4x8(uint p) noexcept;
+GLSL_PREFIX uvec2 [[spirv::GLSLstd450(65)]] unpackDouble2x32(double v) noexcept;
 
+// https://www.khronos.org/registry/OpenGL/specs/gl/GLSLangSpec.4.60.html#geometric-functions
 GLSL_PREFIX float  [[spirv::GLSLstd450(66)]] length(vec2  a) noexcept { return sqrt(__vector_dot(a, a)); }
 GLSL_PREFIX float  [[spirv::GLSLstd450(66)]] length(vec3  a) noexcept { return sqrt(__vector_dot(a, a)); }
 GLSL_PREFIX float  [[spirv::GLSLstd450(66)]] length(vec4  a) noexcept { return sqrt(__vector_dot(a, a)); }
@@ -581,8 +602,8 @@ enum class gl_layout_t : unsigned {
 struct [[spirv::block]] gl_PerVertex {
   [[spirv::builtin(0)]] vec4  Position;
   [[spirv::builtin(1)]] float PointSize;
-  [[spirv::builtin(3)]] float ClipDistance[1];
-  [[spirv::builtin(4)]] float CullDistance[1];
+  [[spirv::builtin(3)]] float ClipDistance[4];
+  [[spirv::builtin(4)]] float CullDistance[4];
 };
 
 // Vertex variables.
@@ -642,6 +663,7 @@ enum class gltese_ordering_t : unsigned {
 [[spirv::out]] gl_PerVertex glgeom_Output;
 
 [[spirv::builtin(7)             ]] int          glgeom_PrimitiveIDIn;
+[[spirv::builtin(8)             ]] int          glgeom_InvocationID;
 [[spirv::builtin(7),  spirv::out]] int          glgeom_PrimitiveID;   // output
 [[spirv::builtin(9),  spirv::out]] int          glgeom_Layer;         // output
 [[spirv::builtin(10), spirv::out]] int          glgeom_ViewportIndex; // output
@@ -667,8 +689,8 @@ enum class glgeom_output_t : unsigned {
 // Fragment variables.
 [[spirv::builtin(15)]] vec4  glfrag_FragCoord;
 [[spirv::builtin(17)]] bool  glfrag_FrontFacing;
-[[spirv::builtin(3) ]] float glfrag_ClipDistance[1];
-[[spirv::builtin(4) ]] float glfrag_CullDistance[1];
+[[spirv::builtin(3) ]] float glfrag_ClipDistance[4];
+[[spirv::builtin(4) ]] float glfrag_CullDistance[4];
 [[spirv::builtin(16)]] vec2  glfrag_PointCoord;
 [[spirv::builtin(7) ]] int   glfrag_PrimitiveID;
 [[spirv::builtin(18)]] int   glfrag_SampleID;
@@ -753,7 +775,7 @@ enum class glfrag_origin_t : unsigned {
 // GLSL_NV_mesh_shader
 
 [[spirv::out]]
-gl_PerVertex glmesh_Output[12];
+gl_PerVertex glmesh_Output[126];
 
 // Task shader variables.
 [[spirv::builtin(5274), spirv::out]] uint glmesh_TaskCount;
@@ -2740,6 +2762,11 @@ const uint gl_RayQueryCandidateIntersectionAABB = 1;
 [[spirv::builtin]] dvec3  gl_subgroupQuadSwapDiagonal(dvec3  value) noexcept;
 [[spirv::builtin]] dvec4  gl_subgroupQuadSwapDiagonal(dvec4  value) noexcept;
 
+////////////////////////////////////////////////////////////////////////////////
+// GL_ARB_shader_clock
+
+// OpReadClockKHR
+[[spirv::builtin]] uint64_t gl_clock() noexcept;
 
 ////////////////////////////////////////////////////////////////////////////////
 // SPIRV data storage. These has internal linkage but are marked extern
@@ -2751,3 +2778,171 @@ extern const size_t __spirv_size;
 } // namespace
 
 #endif
+
+)text";
+
+template<typename type_t>
+static type_t* get_decl(ident_t ident, scope_ns_t* ns) {
+  decl_t* decl = ns->find_name(ident);
+  return cir_cast<type_t>(decl);
+}
+
+spirv_decls_t make_spirv_decls(context_t& ctx) {
+  spirv_decls_t decls { };
+  fe::grammar_t g { ctx };
+
+  // Parse the pre-declarations.  
+  range_t range = frontend.preprocessor->inject_text(spirv_pre, 
+    "SPIR-V implicit declarations");
+  auto series = g.syntax_series(range);
+  g.statements(series->attr);
+
+  if(ctx.errors->size())
+    throw logging::abort_t();
+
+  // Get a pointer to the namespace.
+  scope_ns_t* ns = frontend.global_ns.get();
+  if(frontend.options.spirv_namespace.size()) {
+    ns = cir_cast<scope_ns_t>(frontend.global_ns->find_name(
+      decl_name_t(frontend.ident(frontend.options.spirv_namespace))));
+  }
+
+  #define GET_CLASS(name) \
+    get_decl<class_t>(ident_##name, ns)
+  #define GET_ENUM(name) \
+    get_decl<type_enum_t>(ident_##name, ns)
+
+  #define SET_MEMBER(name) \
+    decls.name = decls.gl_PerVertex->def->find_member( \
+      decl_name_t { ident_##name }, 0);
+  #define SET_CLASS(name) \
+    decls.name = get_decl<class_t>(ident_##name, ns)
+  #define SET_OBJECT(name) \
+    decls.name = get_decl<decl_object_t>(ident_##name, ns)
+  #define SET_FUNCTION(name) \
+    decls.name = get_decl<function_t>(ident_##name, ns)
+  #define SET_ENUM(name) \
+    decls.name = GET_ENUM(name)
+
+  SET_ENUM(gl_layout_t);
+  SET_ENUM(gl_format_t);
+  SET_ENUM(gltese_primitive_t);
+  SET_ENUM(gltese_spacing_t);
+  SET_ENUM(gltese_ordering_t);
+  SET_ENUM(glgeom_input_t);
+  SET_ENUM(glgeom_output_t);
+  SET_ENUM(glfrag_origin_t);
+  SET_ENUM(glmesh_output_t);
+
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Sampler types
+
+  // Floating-point opaque types.
+  decls.samplers[0].sampler1D =              GET_ENUM(sampler1D);
+  decls.samplers[0].sampler1DShadow =        GET_ENUM(sampler1DShadow);
+  decls.samplers[0].sampler1DArray =         GET_ENUM(sampler1DArray);
+  decls.samplers[0].sampler1DArrayShadow =   GET_ENUM(sampler1DArrayShadow);
+  decls.samplers[0].sampler2D =              GET_ENUM(sampler2D);
+  decls.samplers[0].sampler2DShadow =        GET_ENUM(sampler2DShadow);
+  decls.samplers[0].sampler2DArray =         GET_ENUM(sampler2DArray);
+  decls.samplers[0].sampler2DArrayShadow =   GET_ENUM(sampler2DArrayShadow);
+  decls.samplers[0].sampler2DMS =            GET_ENUM(sampler2DMS);
+  decls.samplers[0].sampler2DMSArray =       GET_ENUM(sampler2DMSArray);
+  decls.samplers[0].sampler2DRect =          GET_ENUM(sampler2DRect);
+  decls.samplers[0].sampler2DRectShadow =    GET_ENUM(sampler2DRectShadow);
+  decls.samplers[0].sampler3D =              GET_ENUM(sampler3D);
+  decls.samplers[0].samplerCube =            GET_ENUM(samplerCube);
+  decls.samplers[0].samplerCubeShadow =      GET_ENUM(samplerCubeShadow);
+  decls.samplers[0].samplerCubeArray =       GET_ENUM(samplerCubeArray);
+  decls.samplers[0].samplerCubeArrayShadow = GET_ENUM(samplerCubeArrayShadow);
+  decls.samplers[0].samplerBuffer =          GET_ENUM(samplerBuffer);
+
+  // Signed integer opaque types.
+  decls.samplers[1].sampler1D =              GET_ENUM(isampler1D);
+  decls.samplers[1].sampler1DArray =         GET_ENUM(isampler1DArray);
+  decls.samplers[1].sampler2D =              GET_ENUM(isampler2D);
+  decls.samplers[1].sampler2DArray =         GET_ENUM(isampler2DArray);
+  decls.samplers[1].sampler2DMS =            GET_ENUM(isampler2DMS);
+  decls.samplers[1].sampler2DMSArray =       GET_ENUM(isampler2DMSArray);
+  decls.samplers[1].sampler2DRect =          GET_ENUM(isampler2DRect);
+  decls.samplers[1].sampler3D =              GET_ENUM(isampler3D);
+  decls.samplers[1].samplerCube =            GET_ENUM(isamplerCube);
+  decls.samplers[1].samplerCubeArray =       GET_ENUM(isamplerCubeArray);
+  decls.samplers[1].samplerBuffer =          GET_ENUM(isamplerBuffer);
+
+  // Unsigned integer opaque types.
+  decls.samplers[2].sampler1D =              GET_ENUM(usampler1D);
+  decls.samplers[2].sampler1DArray =         GET_ENUM(usampler1DArray);
+  decls.samplers[2].sampler2D =              GET_ENUM(usampler2D);
+  decls.samplers[2].sampler2DArray =         GET_ENUM(usampler2DArray);
+  decls.samplers[2].sampler2DMS =            GET_ENUM(usampler2DMS);
+  decls.samplers[2].sampler2DMSArray =       GET_ENUM(usampler2DMSArray);
+  decls.samplers[2].sampler2DRect =          GET_ENUM(usampler2DRect);
+  decls.samplers[2].sampler3D =              GET_ENUM(usampler3D);
+  decls.samplers[2].samplerCube =            GET_ENUM(usamplerCube);
+  decls.samplers[2].samplerCubeArray =       GET_ENUM(usamplerCubeArray);
+  decls.samplers[2].samplerBuffer =          GET_ENUM(usamplerBuffer);
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Image types
+
+  // Floating-point opaque types.
+  decls.images[0].image1D =                  GET_ENUM(image1D);
+  decls.images[0].image1DArray =             GET_ENUM(image1DArray);
+  decls.images[0].image2D =                  GET_ENUM(image2D);
+  decls.images[0].image2DArray =             GET_ENUM(image2DArray);
+  decls.images[0].image2DMS =                GET_ENUM(image2DMS);
+  decls.images[0].image2DMSArray =           GET_ENUM(image2DMSArray);
+  decls.images[0].image2DRect =              GET_ENUM(image2DRect);
+  decls.images[0].image3D =                  GET_ENUM(image3D);
+  decls.images[0].imageCube =                GET_ENUM(imageCube);
+  decls.images[0].imageCubeArray =           GET_ENUM(imageCubeArray);
+  decls.images[0].imageBuffer =              GET_ENUM(imageBuffer);
+  decls.images[0].subpassInput =             GET_ENUM(subpassInput);
+  decls.images[0].subpassInputMS =           GET_ENUM(subpassInputMS);
+
+  // Signed integer opaque types.
+  decls.images[1].image1D =                  GET_ENUM(iimage1D);
+  decls.images[1].image1DArray =             GET_ENUM(iimage1DArray);
+  decls.images[1].image2D =                  GET_ENUM(iimage2D);
+  decls.images[1].image2DArray =             GET_ENUM(iimage2DArray);
+  decls.images[1].image2DMS =                GET_ENUM(iimage2DMS);
+  decls.images[1].image2DMSArray =           GET_ENUM(iimage2DMSArray);
+  decls.images[1].image2DRect =              GET_ENUM(iimage2DRect);
+  decls.images[1].image3D =                  GET_ENUM(iimage3D);
+  decls.images[1].imageCube =                GET_ENUM(iimageCube);
+  decls.images[1].imageCubeArray =           GET_ENUM(iimageCubeArray);
+  decls.images[1].imageBuffer =              GET_ENUM(iimageBuffer);
+  decls.images[1].subpassInput =             GET_ENUM(isubpassInput);
+  decls.images[2].subpassInputMS =           GET_ENUM(isubpassInputMS);
+  
+  // Unsigned integer opaque types.
+  decls.images[2].image1D =                  GET_ENUM(uimage1D);
+  decls.images[2].image1DArray =             GET_ENUM(uimage1DArray);
+  decls.images[2].image2D =                  GET_ENUM(uimage2D);
+  decls.images[2].image2DArray =             GET_ENUM(uimage2DArray);
+  decls.images[2].image2DMS =                GET_ENUM(uimage2DMS);
+  decls.images[2].image2DMSArray =           GET_ENUM(uimage2DMSArray);
+  decls.images[2].image2DRect =              GET_ENUM(uimage2DRect);
+  decls.images[2].image3D =                  GET_ENUM(uimage3D);
+  decls.images[2].imageCube =                GET_ENUM(uimageCube);
+  decls.images[2].imageCubeArray =           GET_ENUM(uimageCubeArray);
+  decls.images[2].imageBuffer =              GET_ENUM(uimageBuffer);
+  decls.images[2].subpassInput =             GET_ENUM(usubpassInput);
+  decls.images[2].subpassInputMS =           GET_ENUM(usubpassInputMS);
+
+  SET_OBJECT(__spirv_data);
+  SET_OBJECT(__spirv_size);
+
+  #undef GET_CLASS
+  #undef GET_ENUM
+  #undef SET_FUNCTION
+  #undef SET_OBJECT
+  #undef SET_MEMBER
+  #undef SET_CLASS
+
+  return decls;
+}
+
+END_SEMA_NAMESPACE
