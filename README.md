@@ -3420,7 +3420,7 @@ void task_shader() {
 }
 ```
 
-Like many compute shaders, the task/amplification shader uses a prefix sum to generate work itmes. Each thread in the task shader loads the bounding box for a different meshlet. The bounding box is culled against the view frustum, and in this sample, against user-adjustable clipping planes. 
+Like many compute shaders, the task/amplification shader uses a prefix sum to generate work items. Each thread in the task shader loads the bounding box for a different meshlet. The bounding box is culled against the view frustum, and in this sample, against user-adjustable clipping planes. 
 
 If the meshlet is not culled, it is rendered by generating a task for the subsequent mesh shader stage. Each thread submits its render bit to `gl_subgroupBallot`, a warp-synchronous instruction which combines the flags from each lane and returns them in a single value. The OpenGL/Vulkan subgroup extension supports subgroups up to 128 lanes, which is why the result object is a uvec4: it needs 128 bits. (The subgroup is 32 lanes wide on NVIDIA and 64 lanes wide on AMD hardware.)
 
