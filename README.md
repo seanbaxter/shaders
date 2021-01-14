@@ -562,7 +562,7 @@ void myapp_t::create_shaders() {
 }
 ```
 
-All shaders in a C++ translation unit are linked in a single SPIR-V binary module, which is bound in the byte array `__spirv_data` with length, in bytes, `__spirv_size`. Pass these terms to `glShaderBinary` or `VkShaderModuleCreate` where you'd typically pass data loaded from file. Due to the multi-entry-point module nature of the system, you only need one `glShaderBinary` or `VkShaderModuleCreate` per C++ translation unit. All the `glSpecializeShader` and `VkPipelineShaderStageCreate` calls source into this common module.
+All shaders in a C++ translation unit are linked in a single SPIR-V binary module, which is bound in the byte array `__spirv_data` with length, in bytes, `__spirv_size`. Pass these terms to `glShaderBinary` or `VkShaderModuleCreate` where you'd typically pass data loaded from file. Due to the multi-entry-point module nature of the system, you only need one `glShaderBinary` or `VkCreateShaderModule` per C++ translation unit. All the `glSpecializeShader` and `VkPipelineShaderStageCreate` calls source into this common module.
 
 Shader functions are only lowered to SPIR-V if they are _ODR-used_. ODR usage is a complex topic, but for our purposes, it just means that the shader name or the specialization of a shader function template must appear inside a `@spirv` operator. This special operator causes the shader to be lowered to SPIR-V binary and returns the mangled name of the shader. It's intended to provide the _name_ argument of `glSpecializeShader` and `VkPipelineShaderStageCreate`. Requesting the name of the shader is its ODR usage. This is similar to 'inline' linkage for normal functions: you can include as many shaders in your translation unit as you want, either directly or through headers, but only those used by `@spirv` are ODR-used and lowered to code.
 
@@ -3021,7 +3021,7 @@ void system_t::sort_particles() {
 2. Sort the cell hashes. Produce a gather index as value.
 3. Reorder the particles from the gather indices and produce cell ranges.
 
-Phases 1 and 3 are embarrassingly and implemented in C++ lambdas. Their closures capture iterators returned from the `gl_buffer_t::bind_ssbo` calls.
+Phases 1 and 3 are embarrassingly parallel and implemented in C++ lambdas. Their closures capture iterators returned from the `gl_buffer_t::bind_ssbo` calls.
 
 Phase 2 is provided by the `mgpu::sort_pipeline_t` object. This maintains auxiliary buffers for executing the sort. Using the sort from the host is a single member function call: `sort_keys_indices`. Key and value buffers are provided and the library performs resource binding and shader dispatches.
 

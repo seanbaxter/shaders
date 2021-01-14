@@ -286,6 +286,8 @@ GLSL_PREFIX dvec2  [[spirv::GLSLstd450(32)]] inversesqrt(dvec2  a) noexcept { re
 GLSL_PREFIX dvec3  [[spirv::GLSLstd450(32)]] inversesqrt(dvec3  a) noexcept { return __vector_apply(__builtin_rsqrt,  a); }
 GLSL_PREFIX dvec4  [[spirv::GLSLstd450(32)]] inversesqrt(dvec4  a) noexcept { return __vector_apply(__builtin_rsqrt,  a); }
 
+// 8.3 Common Functions
+
 GLSL_PREFIX float  [[spirv::GLSLstd450(4)]] abs(float  a) noexcept { return                __builtin_fabsf( a); }
 GLSL_PREFIX vec2   [[spirv::GLSLstd450(4)]] abs(vec2   a) noexcept { return __vector_apply(__builtin_fabsf, a); }
 GLSL_PREFIX vec3   [[spirv::GLSLstd450(4)]] abs(vec3   a) noexcept { return __vector_apply(__builtin_fabsf, a); }
@@ -588,6 +590,25 @@ GLSL_PREFIX [[spirv::builtin]] float uintBitsToFloat(uint  x) noexcept { return 
 GLSL_PREFIX [[spirv::builtin]] vec2  uintBitsToFloat(uvec2 x) noexcept { return __vector_apply(uintBitsToFloat(0u), x); }
 GLSL_PREFIX [[spirv::builtin]] vec3  uintBitsToFloat(uvec3 x) noexcept { return __vector_apply(uintBitsToFloat(0u), x); }
 GLSL_PREFIX [[spirv::builtin]] vec4  uintBitsToFloat(uvec4 x) noexcept { return __vector_apply(uintBitsToFloat(0u), x); }
+
+GLSL_PREFIX float  [[spirv::GLSLstd450(51)]] frexp(float  x, int*   y) noexcept { return                __builtin_frexpf( x, y); }
+GLSL_PREFIX vec2   [[spirv::GLSLstd450(51)]] frexp(vec2   x, ivec2* y) noexcept { return __vector_apply(__builtin_frexpf, x, y); }
+GLSL_PREFIX vec3   [[spirv::GLSLstd450(51)]] frexp(vec3   x, ivec3* y) noexcept { return __vector_apply(__builtin_frexpf, x, y); }
+GLSL_PREFIX vec4   [[spirv::GLSLstd450(51)]] frexp(vec4   x, ivec4* y) noexcept { return __vector_apply(__builtin_frexpf, x, y); }
+extern "C"  double [[spirv::GLSLstd450(51)]] frexp(double x, int*   y) noexcept;
+GLSL_PREFIX dvec2  [[spirv::GLSLstd450(51)]] frexp(dvec2  x, ivec2* y) noexcept { return __vector_apply(__builtin_frexp,  x, y); }
+GLSL_PREFIX dvec3  [[spirv::GLSLstd450(51)]] frexp(dvec3  x, ivec3* y) noexcept { return __vector_apply(__builtin_frexp,  x, y); }
+GLSL_PREFIX dvec4  [[spirv::GLSLstd450(51)]] frexp(dvec4  x, ivec4* y) noexcept { return __vector_apply(__builtin_frexp,  x, y); }
+
+GLSL_PREFIX float  [[spirv::GLSLstd450(53)]] ldexp(float  x, int   y) noexcept { return                __builtin_ldexpf( x, y); }
+GLSL_PREFIX vec2   [[spirv::GLSLstd450(53)]] ldexp(vec2   x, ivec2 y) noexcept { return __vector_apply(__builtin_ldexpf, x, y); }
+GLSL_PREFIX vec3   [[spirv::GLSLstd450(53)]] ldexp(vec3   x, ivec3 y) noexcept { return __vector_apply(__builtin_ldexpf, x, y); }
+GLSL_PREFIX vec4   [[spirv::GLSLstd450(53)]] ldexp(vec4   x, ivec4 y) noexcept { return __vector_apply(__builtin_ldexpf, x, y); }
+extern "C"  double [[spirv::GLSLstd450(53)]] ldexp(double x, int   y) noexcept;
+GLSL_PREFIX dvec2  [[spirv::GLSLstd450(53)]] ldexp(dvec2  x, ivec2 y) noexcept { return __vector_apply(__builtin_ldexp,  x, y); }
+GLSL_PREFIX dvec3  [[spirv::GLSLstd450(53)]] ldexp(dvec3  x, ivec3 y) noexcept { return __vector_apply(__builtin_ldexp,  x, y); }
+GLSL_PREFIX dvec4  [[spirv::GLSLstd450(53)]] ldexp(dvec4  x, ivec4 y) noexcept { return __vector_apply(__builtin_ldexp,  x, y); }
+
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1996,6 +2017,22 @@ enum class [[spirv::opcode(5341)]] accelerationStructure : long long;
   vec3 direction,
   float Tmax,
   int payload);
+
+// Payload is a pointer to the ray payload structure to use for this trace.
+// Payload must be the result of an OpVariable with a storage class of 
+// RayPayloadKHR or IncomingRayPayloadKHR.
+// [[spirv::opcode(4445)]] void glray_TraceKHR(
+//   accelerationStructure topLevel,
+//   uint rayFlags,
+//   uint cullMask,
+//   uint sbtRecordOffset,
+//   uint sbtRecordStride,
+//   uint missIndex,
+//   vec3 origin,
+//   float Tmin,
+//   vec3 direction,
+//   float Tmax,
+//   void* payload); 
 
 const uint gl_RayFlagsNone = 0;
 const uint gl_RayFlagsOpaque = 1;
