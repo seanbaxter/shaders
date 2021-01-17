@@ -2,13 +2,13 @@
 #error "Requires Circle build 109"
 #endif
 
-#include <mgpu/kernel_mergesort.hxx>
+#include <mgpu/gl/mergesort.hxx>
 #include <memory>
 
 #define USE_IMGUI
 #include "../include/appglfw.hxx"
 
-using mgpu::gl_buffer_t;
+using namespace mgpu::gl;
 
 // Simulation parameters are stored in host memory in system_t kept in UBO 1
 // to support shaders.
@@ -138,7 +138,7 @@ struct system_t {
   gl_buffer_t<ivec2[]> cell_ranges;
 
   // Cache of buffers for merge sort.
-  mgpu::mergesort_pipeline_t<int, int> sort_pipeline;
+  mergesort_pipeline_t<int, int> sort_pipeline;
 };
 
 inline float frand(float range) {
@@ -246,7 +246,7 @@ void system_t::sort_particles() {
 
   // 1. Quantize the particles into cells. Hash the cell coordinates
   //    into an integer.
-  mgpu::gl_transform([=](int index) {
+  gl_transform([=](int index) {
     vec3 pos = pos_data[index].xyz;
     ivec3 gridPos = calcGridPos(pos, sim_params_ubo);
     int hash = hashGridPos(gridPos, sim_params_ubo);
@@ -272,7 +272,7 @@ void system_t::sort_particles() {
   cell_ranges.clear_bytes();
   auto cell_ranges_out = cell_ranges.bind_ssbo<6>();
 
-  mgpu::gl_transform([=](int index) {
+  gl_transform([=](int index) {
     // Load the gather and hash values.
     int gather = gather_in[index];
     int hash = hash_in[index];
@@ -308,7 +308,7 @@ void system_t::collide() {
   auto cell_ranges_in = cell_ranges.bind_ssbo<2>();
   auto vel_out = velocities_out.bind_ssbo<3>();
 
-  mgpu::gl_transform([=](int index) {
+  gl_transform([=](int index) {
     vec3 f { };
     float r = sim_params_ubo.particleRadius;
 
@@ -361,7 +361,7 @@ void system_t::integrate() {
   auto pos_data = positions.bind_ssbo<0>();
   auto vel_data = velocities.bind_ssbo<1>();
 
-  mgpu::gl_transform([=](int index) {
+  gl_transform([=](int index) {
     SimParams params = sim_params_ubo;
 
     // Load the particle.

@@ -76,6 +76,14 @@
     * [Moderngpu for shaders](#moderngpu-for-shaders)
     * [The particles demo](#the-particles-demo)
 
+1. [Advanced compute with Vulkan]
+
+    * [Shader parameters and push constants](#shader-parameters-and-push-constants)
+    * [Chevron launches](#chevron-launches)
+    * [Physical storage buffers](#physcial-storage-buffers)
+    * [Lambda dispatch](#lambda-dispatch)
+    * [Moderngpu for Vulkan](#moderngpu-for-Vulkan)
+
 1. [Ray Tracing with Vulkan RTX](#ray-tracing-with-vulkan-rtx)
 
     [![ray_tracing1](images/ray_tracing1_small.png)](#ray-tracing-with-vulkan-rtx)
@@ -2603,24 +2611,33 @@ void kernel_partition(mp_it mp_data, a_it a, int a_count, b_it b, int b_count,
 
 I factored out the logic for the kernel that performs the partitioning into something that's API- and IR-neutral. `kernel_partition` isn't tagged with `[spirv::comp]` to make it an OpenGL/Vulkan compute shader, nor is it tagged with `__global__` to make it a CUDA kernel. But it implements all the responsibilities of a kernel. The thread ID and block ID are pulled from the `threadIdx` and `blockIdx` variables, and combined to get the global thread index within the launch. If this global index is less than the work item count, it performs the merge path search and stores the data out to `mp_data`. Even at this point, the input and output array types _are not pointers_. They remain iterators. We want to defer selection of actual data types until we reach the kernel or shader entry point, because writing explicit data types inhibits portability.
 
-[**kernel_partition.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/kernel_partition.hxx)
+[**kernel_partition.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/gl/partition.hxx)
 ```cpp
 template<bounds_t bounds, typename params_t, int mp, int ubo>
 [[using spirv: comp, local_size(128)]]
 void kernel_partition() {
   // Load the kernel parameters from the uniform buffer at binding=ubo.
   params_t params = shader_uniform<ubo, params_t>;
+  int a_count = params.a_count;
+  int b_count = params.b_count;
+  int spacing = params.spacing;
 
-  // Launch the kernel using kernel parameters.
-  kernel_partition<bounds>(
-    writeonly_iterator_t<int, mp>(),
-    params.a_keys,
-    params.a_count,
-    params.b_keys,
-    params.b_count,
-    params.spacing,
-    params.comp
-  );
+  int num_partitions = num_merge_partitions(a_count + b_count, spacing);
+  int index = threadIdx.x + blockDim.x * blockIdx.x;
+
+  if(index < num_partitions) {
+    int diag = min(spacing * index, a_count + b_count);
+
+    writeonly_iterator_t<int, mp> mp_data;
+    mp_data[index] = merge_path<bounds>(params.a_keys, a_count, params.b_keys,
+      b_count, diag, params.comp);
+  }
+}
+
+template<bounds_t bounds, typename params_t, int mp, int ubo = 0>
+void launch_partition(int count, int spacing) {
+  int num_ctas = div_up(num_merge_partitions(count, spacing), 128);
+  gl_dispatch_kernel<kernel_partition<bounds, params_t, mp, ubo> >(num_ctas);
 }
 ```
 
@@ -2630,7 +2647,7 @@ The template parameters of `kernel_partition` specify the type of the structure 
 
 Since shader APIs don't generally support pointers (although there is a recent [Vulkan extension](https://github.com/KhronosGroup/SPIRV-Registry/blob/master/extensions/EXT/SPV_EXT_physical_storage_buffer.asciidoc) that allows pointers into some buffers), we can't get a pointer to GPU memory on the host and pass it over the CPU-GPU divide as a kernel argument, like we can with CUDA or OpenCL. We need to construct an iterator that loads from a bound SSBO directly. Fortunately, the single source C++ design model makes this pretty easy.
 
-[**bindings.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/bindings.hxx**)
+[**bindings.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/common/bindings.hxx**)
 ```cpp
 template<auto index, typename type_t = @enum_type(index)>
 [[using spirv: uniform, binding((int)index)]]
@@ -2653,7 +2670,7 @@ I like using [variable templates](#variable-templates) to _implicitly declare_ s
 
 Instead of passing pointers to the templated GPU algorithms, we'll pass class objects that implement a pointer-like interface but use variable templates to sample their arrays. 
 
-[**bindings.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/bindings.hxx**)
+[**bindings.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/common/bindings.hxx**)
 ```cpp
 template<typename accessor_t, typename type_t = decltype(accessor_t::access(0))>
 struct iterator_t : std::iterator_traits<const std::remove_reference_t<type_t>*> {
@@ -2735,7 +2752,7 @@ The candidates for substitution include the `readonly_access_t`, `writeonly_acce
 
 It's important to keep in mind that the binding index of the SSBO is _part of the iterator's type_. We can aggregate iterators into a structure, optionally give them non-zero starting indices on the host, then copy them into device memory and bind to a UBO. The resource bindings in the iterators are intended to be viral, and propagate to the aggregate, and from there to the compute shader entry point and utility functions through the mechanism of template specialization.
 
-[**kernel_merge.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/kernel_merge.hxx)
+[**kernel_merge.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/common/kernel_merge.hxx)
 ```cpp
 template<
   typename a_keys_it,
@@ -2786,7 +2803,7 @@ The `merge_pipeline_t` class implements the user-facing interface for launching 
 
 References to shader variables like UBOs and SSBOs yield ordinary C++ lvalues. These may decay to pointers and be used as pointers, as long as the pointer values don't cross the CPU-GPU interface. This capability relies on Circle's ability to optimize out pointer operations using CFG passes in the SPIR-V backend. This is a capability under development. Relying on iterators throughout the kernel is more robust.
 
-[**kernel_merge.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/kernel_merge.hxx**)
+[**kernel_merge.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/common/kernel_merge.hxx**)
 ```cpp
 template<
   int nt, int vt, 
@@ -3024,6 +3041,285 @@ void system_t::sort_particles() {
 Phases 1 and 3 are embarrassingly parallel and implemented in C++ lambdas. Their closures capture iterators returned from the `gl_buffer_t::bind_ssbo` calls.
 
 Phase 2 is provided by the `mgpu::sort_pipeline_t` object. This maintains auxiliary buffers for executing the sort. Using the sort from the host is a single member function call: `sort_keys_indices`. Key and value buffers are provided and the library performs resource binding and shader dispatches.
+
+## Advanced compute with Vulkan
+
+### Shader parameters and push constants
+
+All shader stage entry points in both GLSL are HLSL return void and take no function parameters. To pass data to a shader stage, you have to explicitly collect it into uniform or shader-stage buffer objects and bind those resources to the graphics context. This differs from OpenCL and CUDA, which accept kernel arguments through the [clSetKernelArg](https://www.khronos.org/registry/OpenCL/specs/3.0-unified/html/OpenCL_API.html#_setting_kernel_arguments) and [cudaLaunchKernel](https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__EXECUTION.html#group__CUDART__EXECUTION_1g5064cdf5d8e6741ace56fd8be951783c) APIs. These arguments are sent to the device as part of the kernel dispatch command, so no explicit binding is required.
+
+GLSL and Vulkan lack shader parameter support. However, they support _push constants_, small binary assets that are specified with each compute, graphics or ray-tracing pipeline launch. Push constant data isn't involved in descriptor binding; it is encoded directly into the command buffer. All Vulkan devices support push constants of at least 128 bytes. The [vkCmdPushConstants](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdPushConstants.html) sets the associated data with a Vulkan pipeline object.
+
+To provide a smoother experience that more closely tracks CUDA and OpenCL, Circle implicitly declares a push constant object when a shader entry point is marked with the `[[spirv::push]]` C++ attribute. Each function parameter is mapped to a data member in the push constant structure. When the shader is executed, the push constant is implicitly disaggregated, and each of its members is copied to an automatic storage duration variable in the shader body, to mimic the behavior of real function parameters.
+
+```cpp
+template<int nt = 128, typename type_t>
+[[using spirv: comp, local_size(NT), push]]
+void saxpy(int count, type_t a, const type_t* x, type_t* y) {
+  int index = glcomp_GlobalInvocationID.x;
+  if(index < count)
+    y[index] += a * x[index];
+}
+```
+
+When specialized over `float`, the `saxpy` function template shader gets a 24-byte push constant, where the parameters are implicitly stored in a structure with natural alignment. To enable this behavior, you must mark the shader with the `[[spirv::push]]` attribute. You can extend the 128-byte constant limit by passing an optional size to the attribute: `[[spirv::push(256)]]` allows parameters up to 256 bytes in size.
+
+### Chevron launches
+
+CUDA kernels are launched with a chevron. For example,
+
+```cpp
+template<int nt = 128, typename type_t>
+__global__ void saxpy(int count, type_t a, const type_t* x, type_t* y) {
+  int index = threadIdx.x + blockIdx.x * blockDim.x;
+  if(index < count)
+    y[index] += a * x[index];
+}
+
+saxpy<<<num_blocks, 128, 0, stream>>>(count, a, x, y);
+```
+
+The chevron takes four arguments:
+1. The number of blocks in the grid. This may be a 1, 2, or 3-dimensional unit.
+2. The size of each thread group. This may be a 1, 2, or 3-dimensional unit.
+3. Extra shared memory in bytes to provision for the thread group.
+4. The stream to dispatch the kernel on.
+
+The chevron syntax, which is implemented by the compiler, coordinates with the CUDA runtime API to abstract the task of loading and compiling the kernel, pushing its arguments to the driver, and actually dispatching the job. Arguments inside the chevron are for coordinating the launch of the compute grid. Arguments the function parenthesis are pushed to the driver and made available to the kernel on the device side. This helps facilitate generic programming, as template argument deduction is still performed for the kernel's function parameters, without requiring a textual of those arguments from the arguments in the chevron.
+
+Circle implements _programmable_ chevrons to allow Vulkan developers to configure their pipeline shader stages with the same ease of use. Circle supports 14 different shader stages (5 legacy raster, task+mesh, compute and six ray-tracing stages), and invoking the chevron syntax on a function from any stage forwards the arguments to a user-defined chevron function:
+
+* `spirv_chevron_vert`
+* `spirv_chevron_tesc`
+* `spirv_chevron_tese`
+* `spirv_chevron_geom`
+* `spirv_chevron_frag`
+* `spirv_chevron_comp`
+* `spirv_chevron_kern`
+* `spirv_chevron_task`
+* `spirv_chevron_mesh`
+* `spirv_chevron_rgen`
+* `spirv_chevron_rint`
+* `spirv_chevron_rahit`
+* `spirv_chevron_rchit`
+* `spirv_chevron_rmiss`
+* `spirv_chevron_rcall`
+
+Using a chevron launch on a compute shader looks for functions called `spirv_chevron_comp`. Unqualified name lookup and argument-dependent lookup in associated namespaces of the chevron arguments collects function overloads of `spirv_chevron_comp`. Overload resolution finds the candidate that accepts the provided chevron arguments. The shader function is passed as a non-type template parameter, which allows the chevron function to get its mangled name without ODR-using it from the host. 
+
+**launch.hxx**
+```cpp
+// Chevron launch on a SPIR-V compute shader performs ADL lookup to find
+// this symbol, and overload resolution to select this overload.
+template<auto F, typename... params_t>
+static void spirv_chevron_comp(int num_blocks, cmd_buffer_t& cmd_buffer, 
+  params_t... params) {
+
+  static_assert((... && std::is_trivially_copyable_v<params_t>));
+  tuple_t<params_t...> storage { params... };
+
+  cmd_buffer.context.dispatch_compute(
+    cmd_buffer,
+    @spirv(F),
+    cmd_buffer.context.create_module(__spirv_data, __spirv_size),
+    num_blocks,
+    sizeof(storage),
+    &storage
+  );
+}
+```
+
+This chevron function matches chevron launches that provide the block count and command buffer as chevron arguments. Arguments to the shader are implicitly converted to the shader function's parameter types and passed through the variadic template. The chevron function aggregates the function parameters into a structure, which matches their layout in the push constant specified by the SPIR-V for the compiled shader. The `@spirv` extension yields the mangled name of the shader inside its SPIR-V module. And the `__spirv_data` and `__spirv_size` variables locate the SPIR-V shader module binary within the translation unit. These terms are sent to Vulkan client code which loads the shader module, defines and creates the compute pipeline layout, and sets the push constant and dispatches the grid launch to the command buffer.
+
+Why provide an overloadable chevron function? You might define parameters for specifying synchronization before or after the launch. Or take descriptor sets to bind. Or take individual UBO, image, sampler or texture assets and implicitly bind those to the descriptor set and that to the pipeline. Or pass a logger. The chevron is a convenient mechanism to pass any number of additional terms from the caller down to the deepest levels of the Vulkan user code. 
+
+```cpp
+template<int NT = 128, typename type_t>
+[[using spirv: comp, local_size(NT), push]]
+void saxpy(int count, type_t a, const type_t* x, type_t* y) {
+  int index = glcomp_GlobalInvocationID.x;
+  if(index < count)
+    y[index] += a * x[index];
+}
+
+float* x = context.alloc_gpu<float>(count);
+float* y = context.alloc_gpu<float>(count);
+const int NT = 64;    // Use 64 threads per block.
+int num_blocks = mgpu::div_up(count, NT);
+saxpy<NT><<<num_blocks, cmd_buffer>>>(count, M_PIf32, x, y);
+```
+
+This chevron launch passes the grid size and buffer as chevron arguments. Argument deduction is executed on the `saxpy` function template shader arguments, setting `type_t` to `float`. These arguments are converted to function's parameter types and sent, along with the chevron arguments, to the user-defined launch chevron. Note the `[[spirv::push]]` attribute on the compute shader; we need this enable shader parameters.
+
+### Physical storage buffers
+
+The last two sections have casually thrown pointers around. There's nary a shader-stage buffer object in sight.
+
+Pointers into buffers are supported in Vulkan 1.2, with support structures listed under [VK_EXT_buffer_device_address](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VK_EXT_buffer_device_address.html). This is a very good feature. You can allocate buffers with the [VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkBufferUsageFlagBits.html) flag and get a pointer to that buffer's device memory with [vkGetBufferDeviceAddress](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkGetBufferDeviceAddress.html).
+
+We can pass the pointer through a push constant, or through a shader parameter passed via a push constant, or through a uniform or shader-stage buffer object. There is no descriptor set binding involved. You can even pass pointers to complex data structures, chase linked lists, and so on. I think it's the killer feature that makes Vulkan a viable compute platform.
+
+Pointers into device memory have been available on CUDA and OpenCL for more than a decade. This is the first time they're available on a cross-platform, cross-IHV _graphics_ API. You can use pointers from any shader stage, and they're already frequently used, via the [GLSL_EXT_buffer_reference](https://github.com/KhronosGroup/GLSL/blob/master/extensions/ext/GLSL_EXT_buffer_reference.txt) extension, in ray tracing applications.
+
+Together, these three Circle C++ shader features--parameter push constants, chevron launches and physical storage buffer pointer--dramatically improve the usability of Vulkan.
+
+### Lambda dispatch
+
+CUDA and SYCL programs often use C++ lambdas to capture variables from the environment on the host and pass them over the CPU-GPU interface as shader parameters. This functionality can be implemented with Circle shaders in just a few lines of code:
+
+**transform.hxx**
+```cpp
+template<int nt, typename func_t>
+[[using spirv: comp, local_size(nt), push]]
+void launch_cs(func_t func) {
+  func(threadIdx.x, blockIdx.x);
+}
+
+template<int nt, typename func_t>
+static void launch(int num_blocks, cmd_buffer_t& cmd_buffer, func_t func) {
+  launch_cs<nt><<<num_blocks, cmd_buffer>>>(func);
+}
+```
+
+The `launch` function provides a function template compute shader to host a user-provided function object or lambda. Instead of having to externally define a compute shader, you can define it in line, right in the `launch` call:
+
+**vk_transform.cxx**
+```cpp
+  launch<NT>(num_blocks, cmd_buffer, [=](int tid, int cta) {
+    // tid and cta are the thread and workgroup IDs.
+    // combine them for a global ID or read glcomp_GlobalInvocationID.x.
+    int gid = tid + NT * cta;
+
+    // Use the default-copy closure to capture the kernel parameters.
+    if(gid < count) {
+      // SAXPY these terms.
+      y[gid] += a * x[gid];
+    }
+  });
+```
+
+Default capture-by-value brings the `a`, `x` and `y` variables into the lambda's closure. This function object is passed to `launch`, which uses argument deduction to specialize `launch_cs`'s `func_t` parameter as the type of the lambda. The body of the shader just passes the thread and block IDs to the lambda function.
+
+**transform.hxx**
+```cpp
+template<int nt = 256, typename func_t>
+[[using spirv: comp, local_size(nt), push]]
+void transform_cs(int count, func_t func) {
+  int gid = glcomp_GlobalInvocationID.x;
+
+  if(gid >= count)
+    return;
+
+  func(gid);
+}
+
+template<int nt = 256, typename func_t>
+static void transform(int count, cmd_buffer_t& cmd_buffer, func_t func) {
+  int num_blocks = div_up(count, nt);
+  transform_cs<nt><<<num_blocks, cmd_buffer>>>(count, func);
+}
+```
+
+The `transform` function adds even more convenience. It executes the provided function exactly once for each thread below `count`. Since the last block is only partially executed, the job size is passed to the shader alongside the lambda.
+
+**vk_transform.cxx**
+```cpp
+  transform(count, cmd_buffer, [=](int index) {
+    x[index] *= sqrt(y[index]);
+  });
+```
+
+`transform` concisely executes a function in parallel N number of times. The lambda closure captures all variables named in the shader. This is a kind of convenience unprecedented in graphics API programming.
+
+### Moderngpu for Vulkan
+
+The [mgpu-shaders](https://github.com/seanbaxter/mgpu-shaders) rewrite of [Moderngpu](https://github.com/moderngpu/moderngpu/tree/master/src/moderngpu) now targets Vulkan as well as OpenGL. The differences are striking. Push constant parameters, chevron launches and physical storage buffer pointers have allowed us to jettison almost all of the API-specific binding code from the OpenGL path. We can pass pointers into device from from the client straight through to the shader. The moderngpu code that performs the actual mergesort logic is still abstracted from the underlying data type, by way of template parameterization. One entry point for this algorithm supports OpenGL, which uses UBOs and variable templates to pass data and bind data. The other entry point supports Vulkan, and uses push constants to capture parameters and ordinary C++ pointers to provide the data. This is a _bindless_ model. It's faster and much easier to use.
+
+**mergesort.hxx**
+```cpp
+template<int nt = 128, int vt = 7, bool sort_indices = false, 
+  typename key_t, typename val_t, typename comp_t = std::less<key_t> >
+void mergesort_kv(cmd_buffer_t& cmd_buffer, memcache_t& cache, 
+  key_t* keys, val_t* vals, int count, comp_t comp = comp_t()) {
+
+  static_assert(!sort_indices || std::is_same_v<int, val_t>);
+  constexpr bool has_values = !std::is_same_v<empty_t, val_t>;
+
+  int num_ctas = div_up(count, nt * vt);
+  int num_passes = find_log2(num_ctas, true);
+
+  if(0 == num_passes) {
+    // For a single CTA, sort in place and don't require any cache memory.
+    launch<nt>(num_ctas, cmd_buffer, [=](int tid, int cta) {
+      kernel_blocksort<sort_indices, nt, vt>(keys, vals, keys, vals, 
+        count, comp);
+    });
+
+  } else {
+    int num_partitions = num_ctas + 1;
+
+    // Allocate temporary storage for the partitions and ping-pong buffers.
+    const size_t sizes[] {
+      sizeof(int) * num_partitions,
+      sizeof(key_t) * count,
+      has_values ? sizeof(val_t) * count : 0ul
+    };
+    void* allocations[3];
+    cache.allocate(sizes, 3, allocations);
+
+    int* mp = (int*)allocations[0];
+    key_t* keys2 = (key_t*)allocations[1];
+    val_t* vals2 = (val_t*)allocations[2];
+
+    key_t* keys_blocksort = (1 & num_passes) ? keys2 : keys;
+    val_t* vals_blocksort = (1 & num_passes) ? vals2 : vals;
+
+    // Blocksort the input.
+    launch<nt>(num_ctas, cmd_buffer, [=](int tid, int cta) {
+      kernel_blocksort<sort_indices, nt, vt>(keys, vals, keys_blocksort,
+        vals_blocksort, count, comp);
+    });
+
+    if(1 & num_passes) {
+      std::swap(keys, keys2);
+      std::swap(vals, vals2);
+    }
+
+    for(int pass = 0; pass < num_passes; ++pass) {
+      int coop = 2<< pass;
+
+      // Partition the partially-sorted inputs.
+      transform(num_partitions, cmd_buffer, [=](int index) {
+        int spacing = nt * vt;
+        merge_range_t range = compute_mergesort_range(count, index, coop, 
+          spacing);
+        int diag = min(spacing * index, count) - range.a_begin;
+        mp[index] = merge_path<bounds_lower>(keys + range.a_begin,
+          range.a_count(), keys + range.b_begin, range.b_count(), diag, comp);
+      });
+
+      // Launch the merge pass.
+      launch<nt>(num_ctas, cmd_buffer, [=](int tid, int cta) {
+        kernel_mergesort_pass<nt, vt>(mp, keys, vals, keys2, vals2, count,
+          coop, comp);
+      });
+      
+      std::swap(keys, keys2);
+      std::swap(vals, vals2);
+    }
+  }
+}
+```
+
+This is the entirety of the Vulkan entry point for the GPU mergesort. It's worth examining in its entirety.
+
+First, the number of passes is calculated. If only the blocksort is required, with no merge passes, execute the blocksort on the data, in-place, and return. Otherwise, use the memcache object to allocate storage for the merge path partitions and the ping-pong arrays.
+
+We now blocksort the input and enter the loop to merge pairs of sorted sequences until the entire input is sorted. The `transform` function, which is used to launch embarrassingly parallel tasks, computes the merge path intersection for each workgroup. This entire operation is encoded in line, at the point of the launch, inside a lambda. Device pointers are captured from the host function, bound into the lambda closure, and uploaded to the GPU over a push constant. Inside the shader, they're extracted back into function parameters. This sequence of operations is textually seamless.
+
+The real logic of the mergesort, the parallel merge, is implemented in a data-agnostic way in `kernel_mergesort_pass`. We call this function from a `launch` invocation, forwarding it the function's parameters via the closure and push constant.
+
+This implementation closely tracks the original CUDA moderngpu code. The OpenGL entry-point is more contorted, as it lacks pointers and a way to pass shader parameters. The Vulkan entry-point uses these new features, along with the chevron launch which serves the `transform` and `launch` functions, to present a smooth, bindless approach to Vulkan compute shaders.
 
 ## Ray Tracing with Vulkan RTX
 
