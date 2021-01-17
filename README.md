@@ -76,7 +76,7 @@
     * [Moderngpu for shaders](#moderngpu-for-shaders)
     * [The particles demo](#the-particles-demo)
 
-1. [Advanced compute with Vulkan]
+1. [Advanced compute with Vulkan](#advanced-compute-with-vulkan)
 
     * [Shader parameters and push constants](#shader-parameters-and-push-constants)
     * [Chevron launches](#chevron-launches)
@@ -3107,7 +3107,7 @@ Circle implements _programmable_ chevrons to allow Vulkan developers to configur
 
 Using a chevron launch on a compute shader looks for functions called `spirv_chevron_comp`. Unqualified name lookup and argument-dependent lookup in associated namespaces of the chevron arguments collects function overloads of `spirv_chevron_comp`. Overload resolution finds the candidate that accepts the provided chevron arguments. The shader function is passed as a non-type template parameter, which allows the chevron function to get its mangled name without ODR-using it from the host. 
 
-**launch.hxx**
+[**launch.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/vk/launch.hxx)
 ```cpp
 // Chevron launch on a SPIR-V compute shader performs ADL lookup to find
 // this symbol, and overload resolution to select this overload.
@@ -3167,7 +3167,7 @@ Together, these three Circle C++ shader features--parameter push constants, chev
 
 CUDA and SYCL programs often use C++ lambdas to capture variables from the environment on the host and pass them over the CPU-GPU interface as shader parameters. This functionality can be implemented with Circle shaders in just a few lines of code:
 
-**transform.hxx**
+[**transform.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/vk/transform.hxx)
 ```cpp
 template<int nt, typename func_t>
 [[using spirv: comp, local_size(nt), push]]
@@ -3183,7 +3183,7 @@ static void launch(int num_blocks, cmd_buffer_t& cmd_buffer, func_t func) {
 
 The `launch` function provides a function template compute shader to host a user-provided function object or lambda. Instead of having to externally define a compute shader, you can define it in line, right in the `launch` call:
 
-**vk_transform.cxx**
+[**vk_transform.cxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/examples/vk_transform/vk_transform.cxx)
 ```cpp
   launch<NT>(num_blocks, cmd_buffer, [=](int tid, int cta) {
     // tid and cta are the thread and workgroup IDs.
@@ -3200,7 +3200,7 @@ The `launch` function provides a function template compute shader to host a user
 
 Default capture-by-value brings the `a`, `x` and `y` variables into the lambda's closure. This function object is passed to `launch`, which uses argument deduction to specialize `launch_cs`'s `func_t` parameter as the type of the lambda. The body of the shader just passes the thread and block IDs to the lambda function.
 
-**transform.hxx**
+[**transform.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/vk/transform.hxx)
 ```cpp
 template<int nt = 256, typename func_t>
 [[using spirv: comp, local_size(nt), push]]
@@ -3222,7 +3222,7 @@ static void transform(int count, cmd_buffer_t& cmd_buffer, func_t func) {
 
 The `transform` function adds even more convenience. It executes the provided function exactly once for each thread below `count`. Since the last block is only partially executed, the job size is passed to the shader alongside the lambda.
 
-**vk_transform.cxx**
+[**vk_transform.cxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/examples/vk_transform/vk_transform.cxx)
 ```cpp
   transform(count, cmd_buffer, [=](int index) {
     x[index] *= sqrt(y[index]);
@@ -3235,7 +3235,7 @@ The `transform` function adds even more convenience. It executes the provided fu
 
 The [mgpu-shaders](https://github.com/seanbaxter/mgpu-shaders) rewrite of [Moderngpu](https://github.com/moderngpu/moderngpu/tree/master/src/moderngpu) now targets Vulkan as well as OpenGL. The differences are striking. Push constant parameters, chevron launches and physical storage buffer pointers have allowed us to jettison almost all of the API-specific binding code from the OpenGL path. We can pass pointers into device from from the client straight through to the shader. The moderngpu code that performs the actual mergesort logic is still abstracted from the underlying data type, by way of template parameterization. One entry point for this algorithm supports OpenGL, which uses UBOs and variable templates to pass data and bind data. The other entry point supports Vulkan, and uses push constants to capture parameters and ordinary C++ pointers to provide the data. This is a _bindless_ model. It's faster and much easier to use.
 
-**mergesort.hxx**
+[**mergesort.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/vk/mergesort.hxx)
 ```cpp
 template<int nt = 128, int vt = 7, bool sort_indices = false, 
   typename key_t, typename val_t, typename comp_t = std::less<key_t> >
