@@ -128,6 +128,8 @@ Working on this compiler has exposed _a lot_ of graphics driver bugs. The vendor
 
 This repository requires Git Large File Storage to support the HDR environment maps used by the glTF viewer project. Make sure to install [Git LFS](https://git-lfs.github.com/) before pulling this project.
 
+The OpenGL samples require the [gl3w](https://github.com/skaslev/gl3w/) library. This isn't supported directly by common package managers. Compile a `libgl3w.so` with [these instructions](https://github.com/skaslev/gl3w/issues/58#issuecomment-396135799). 
+
 The repository has some submodule dependencies. Pull them with:
 ```
 git submodule update --init --recursive
