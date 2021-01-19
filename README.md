@@ -3815,7 +3815,7 @@ These vector declarations are automatically injected into the translation unit w
 Circle adds source and destination swizzle to vectors. This functionality can't sanely be implemented within C++, so custom frontend treatment is a requirement.
 
 ```cpp
-vec cross(vec3 a, vec3 b) {
+vec3 cross(vec3 a, vec3 b) {
   return a.yzx * b.zxy - b.yzx * a.zxy;
 }
 ```
