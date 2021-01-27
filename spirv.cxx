@@ -1,11 +1,3 @@
-#include "implicit.hxx"
-#include "../fe/grammar.hxx"
-
-BEGIN_SEMA_NAMESPACE
-
-using fe::range_t;
-
-const char* spirv_pre = R"text(
 #ifdef SPIRV_IMPLICIT_NAMESPACE
 namespace SPIRV_IMPLICIT_NAMESPACE {
 #endif
@@ -663,7 +655,8 @@ struct [[spirv::block]] gl_PerVertex {
 [[spirv::out]] gl_PerVertex gltese_Output;        // output
 
 enum class gltese_primitive_t : unsigned {
-  triangles,
+  triangles_cw,
+  triangles_ccw,
   quads,
   isolines,
 };
@@ -672,11 +665,6 @@ enum class gltese_spacing_t : unsigned {
   equal,
   fractional_even,
   fractional_odd,
-};
-
-enum class gltese_ordering_t : unsigned {
- cw,
- ccw, 
 };
 
 // Geometry variables.
@@ -2815,171 +2803,3 @@ extern const size_t __spirv_size;
 } // namespace
 
 #endif
-
-)text";
-
-template<typename type_t>
-static type_t* get_decl(ident_t ident, scope_ns_t* ns) {
-  decl_t* decl = ns->find_name(ident);
-  return cir_cast<type_t>(decl);
-}
-
-spirv_decls_t make_spirv_decls(context_t& ctx) {
-  spirv_decls_t decls { };
-  fe::grammar_t g { ctx };
-
-  // Parse the pre-declarations.  
-  range_t range = frontend.preprocessor->inject_text(spirv_pre, 
-    "SPIR-V implicit declarations");
-  auto series = g.syntax_series(range);
-  g.statements(series->attr);
-
-  if(ctx.errors->size())
-    throw logging::abort_t();
-
-  // Get a pointer to the namespace.
-  scope_ns_t* ns = frontend.global_ns.get();
-  if(frontend.options.spirv_namespace.size()) {
-    ns = cir_cast<scope_ns_t>(frontend.global_ns->find_name(
-      decl_name_t(frontend.ident(frontend.options.spirv_namespace))));
-  }
-
-  #define GET_CLASS(name) \
-    get_decl<class_t>(ident_##name, ns)
-  #define GET_ENUM(name) \
-    get_decl<type_enum_t>(ident_##name, ns)
-
-  #define SET_MEMBER(name) \
-    decls.name = decls.gl_PerVertex->def->find_member( \
-      decl_name_t { ident_##name }, 0);
-  #define SET_CLASS(name) \
-    decls.name = get_decl<class_t>(ident_##name, ns)
-  #define SET_OBJECT(name) \
-    decls.name = get_decl<decl_object_t>(ident_##name, ns)
-  #define SET_FUNCTION(name) \
-    decls.name = get_decl<function_t>(ident_##name, ns)
-  #define SET_ENUM(name) \
-    decls.name = GET_ENUM(name)
-
-  SET_ENUM(gl_layout_t);
-  SET_ENUM(gl_format_t);
-  SET_ENUM(gltese_primitive_t);
-  SET_ENUM(gltese_spacing_t);
-  SET_ENUM(gltese_ordering_t);
-  SET_ENUM(glgeom_input_t);
-  SET_ENUM(glgeom_output_t);
-  SET_ENUM(glfrag_origin_t);
-  SET_ENUM(glmesh_output_t);
-
-
-  //////////////////////////////////////////////////////////////////////////////
-  // Sampler types
-
-  // Floating-point opaque types.
-  decls.samplers[0].sampler1D =              GET_ENUM(sampler1D);
-  decls.samplers[0].sampler1DShadow =        GET_ENUM(sampler1DShadow);
-  decls.samplers[0].sampler1DArray =         GET_ENUM(sampler1DArray);
-  decls.samplers[0].sampler1DArrayShadow =   GET_ENUM(sampler1DArrayShadow);
-  decls.samplers[0].sampler2D =              GET_ENUM(sampler2D);
-  decls.samplers[0].sampler2DShadow =        GET_ENUM(sampler2DShadow);
-  decls.samplers[0].sampler2DArray =         GET_ENUM(sampler2DArray);
-  decls.samplers[0].sampler2DArrayShadow =   GET_ENUM(sampler2DArrayShadow);
-  decls.samplers[0].sampler2DMS =            GET_ENUM(sampler2DMS);
-  decls.samplers[0].sampler2DMSArray =       GET_ENUM(sampler2DMSArray);
-  decls.samplers[0].sampler2DRect =          GET_ENUM(sampler2DRect);
-  decls.samplers[0].sampler2DRectShadow =    GET_ENUM(sampler2DRectShadow);
-  decls.samplers[0].sampler3D =              GET_ENUM(sampler3D);
-  decls.samplers[0].samplerCube =            GET_ENUM(samplerCube);
-  decls.samplers[0].samplerCubeShadow =      GET_ENUM(samplerCubeShadow);
-  decls.samplers[0].samplerCubeArray =       GET_ENUM(samplerCubeArray);
-  decls.samplers[0].samplerCubeArrayShadow = GET_ENUM(samplerCubeArrayShadow);
-  decls.samplers[0].samplerBuffer =          GET_ENUM(samplerBuffer);
-
-  // Signed integer opaque types.
-  decls.samplers[1].sampler1D =              GET_ENUM(isampler1D);
-  decls.samplers[1].sampler1DArray =         GET_ENUM(isampler1DArray);
-  decls.samplers[1].sampler2D =              GET_ENUM(isampler2D);
-  decls.samplers[1].sampler2DArray =         GET_ENUM(isampler2DArray);
-  decls.samplers[1].sampler2DMS =            GET_ENUM(isampler2DMS);
-  decls.samplers[1].sampler2DMSArray =       GET_ENUM(isampler2DMSArray);
-  decls.samplers[1].sampler2DRect =          GET_ENUM(isampler2DRect);
-  decls.samplers[1].sampler3D =              GET_ENUM(isampler3D);
-  decls.samplers[1].samplerCube =            GET_ENUM(isamplerCube);
-  decls.samplers[1].samplerCubeArray =       GET_ENUM(isamplerCubeArray);
-  decls.samplers[1].samplerBuffer =          GET_ENUM(isamplerBuffer);
-
-  // Unsigned integer opaque types.
-  decls.samplers[2].sampler1D =              GET_ENUM(usampler1D);
-  decls.samplers[2].sampler1DArray =         GET_ENUM(usampler1DArray);
-  decls.samplers[2].sampler2D =              GET_ENUM(usampler2D);
-  decls.samplers[2].sampler2DArray =         GET_ENUM(usampler2DArray);
-  decls.samplers[2].sampler2DMS =            GET_ENUM(usampler2DMS);
-  decls.samplers[2].sampler2DMSArray =       GET_ENUM(usampler2DMSArray);
-  decls.samplers[2].sampler2DRect =          GET_ENUM(usampler2DRect);
-  decls.samplers[2].sampler3D =              GET_ENUM(usampler3D);
-  decls.samplers[2].samplerCube =            GET_ENUM(usamplerCube);
-  decls.samplers[2].samplerCubeArray =       GET_ENUM(usamplerCubeArray);
-  decls.samplers[2].samplerBuffer =          GET_ENUM(usamplerBuffer);
-
-  //////////////////////////////////////////////////////////////////////////////
-  // Image types
-
-  // Floating-point opaque types.
-  decls.images[0].image1D =                  GET_ENUM(image1D);
-  decls.images[0].image1DArray =             GET_ENUM(image1DArray);
-  decls.images[0].image2D =                  GET_ENUM(image2D);
-  decls.images[0].image2DArray =             GET_ENUM(image2DArray);
-  decls.images[0].image2DMS =                GET_ENUM(image2DMS);
-  decls.images[0].image2DMSArray =           GET_ENUM(image2DMSArray);
-  decls.images[0].image2DRect =              GET_ENUM(image2DRect);
-  decls.images[0].image3D =                  GET_ENUM(image3D);
-  decls.images[0].imageCube =                GET_ENUM(imageCube);
-  decls.images[0].imageCubeArray =           GET_ENUM(imageCubeArray);
-  decls.images[0].imageBuffer =              GET_ENUM(imageBuffer);
-  decls.images[0].subpassInput =             GET_ENUM(subpassInput);
-  decls.images[0].subpassInputMS =           GET_ENUM(subpassInputMS);
-
-  // Signed integer opaque types.
-  decls.images[1].image1D =                  GET_ENUM(iimage1D);
-  decls.images[1].image1DArray =             GET_ENUM(iimage1DArray);
-  decls.images[1].image2D =                  GET_ENUM(iimage2D);
-  decls.images[1].image2DArray =             GET_ENUM(iimage2DArray);
-  decls.images[1].image2DMS =                GET_ENUM(iimage2DMS);
-  decls.images[1].image2DMSArray =           GET_ENUM(iimage2DMSArray);
-  decls.images[1].image2DRect =              GET_ENUM(iimage2DRect);
-  decls.images[1].image3D =                  GET_ENUM(iimage3D);
-  decls.images[1].imageCube =                GET_ENUM(iimageCube);
-  decls.images[1].imageCubeArray =           GET_ENUM(iimageCubeArray);
-  decls.images[1].imageBuffer =              GET_ENUM(iimageBuffer);
-  decls.images[1].subpassInput =             GET_ENUM(isubpassInput);
-  decls.images[2].subpassInputMS =           GET_ENUM(isubpassInputMS);
-  
-  // Unsigned integer opaque types.
-  decls.images[2].image1D =                  GET_ENUM(uimage1D);
-  decls.images[2].image1DArray =             GET_ENUM(uimage1DArray);
-  decls.images[2].image2D =                  GET_ENUM(uimage2D);
-  decls.images[2].image2DArray =             GET_ENUM(uimage2DArray);
-  decls.images[2].image2DMS =                GET_ENUM(uimage2DMS);
-  decls.images[2].image2DMSArray =           GET_ENUM(uimage2DMSArray);
-  decls.images[2].image2DRect =              GET_ENUM(uimage2DRect);
-  decls.images[2].image3D =                  GET_ENUM(uimage3D);
-  decls.images[2].imageCube =                GET_ENUM(uimageCube);
-  decls.images[2].imageCubeArray =           GET_ENUM(uimageCubeArray);
-  decls.images[2].imageBuffer =              GET_ENUM(uimageBuffer);
-  decls.images[2].subpassInput =             GET_ENUM(usubpassInput);
-  decls.images[2].subpassInputMS =           GET_ENUM(usubpassInputMS);
-
-  SET_OBJECT(__spirv_data);
-  SET_OBJECT(__spirv_size);
-
-  #undef GET_CLASS
-  #undef GET_ENUM
-  #undef SET_FUNCTION
-  #undef SET_OBJECT
-  #undef SET_MEMBER
-  #undef SET_CLASS
-
-  return decls;
-}
-
-END_SEMA_NAMESPACE
