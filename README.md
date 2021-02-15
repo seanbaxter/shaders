@@ -265,23 +265,15 @@ $ spirv-dis vert3.spv
 Mark shader entry points with one of these attributes:
 
 * `[[spirv::vert]]` - Vertex stage.
-* `[[spirv::tesc(num_vertices)]]` - Tessellation control stage. 
+* `[[spirv::tesc(primitive, num_vertices)]]` - Tessellation control stage. 
     `num_vertices` - Incoming patch size.
-* `[[spirv::tese(primitive, spacing)]]` - Tessellation evaluation stage. 
-    `primitive` and `spacing` must be values from these enumerations:
-
+* `[[spirv::tese(primitive)]]` - Tessellation evaluation stage.
 ```cpp
 enum class gltese_primitive_t : unsigned {
   triangles_cw,
   triangles_ccw,
   quads,
   isolines,
-};
-
-enum class gltese_spacing_t : unsigned {
-  equal,
-  fractional_even,
-  fractional_odd,
 };
 ```
 * `[[spirv::geom(input, output, max_vertices)]]` - Geometry stage.
@@ -333,6 +325,26 @@ enum class glmesh_output_t : unsigned {
 The `spirv::local_size` attribute is required when declaring compute, task and mesh stages.
 * `[[spirv::local_size(x, y, z)]]` - The workgroup size. The `x` argument is mandatory. The `y` and `z` arguments are optional.
 
+Tessellation shaders incorporate additional optional attributes:
+
+* `[[spirv::output(output)]]` - The type of geometry emitted. This is different from the patch primitive topology, which describes the input geometry.
+* `[[spirv::spacing(spacing)]]` - The subdivision algorithm.
+    These two attributes may be provided on tessellation control shader when targeting D3D12 oer tessellation evaluation when targeting OpenGL. Vulkan supports the attribute on either shader stage.
+
+```cpp
+enum class gltess_output_t : unsigned {
+ points,
+ lines,
+ triangle_cw,
+ triangle_ccw,
+};
+
+enum class gltess_spacing_t : unsigned {
+  equal,
+  fractional_even,
+  fractional_odd,
+};
+```
 ### Interface attributes
 
 Shaders stages are distinguished by a shader attribute. Interface variables are distinguished by interface attributes. In all cases, the interface attribute name indicates the storage class for the variable.
@@ -896,12 +908,13 @@ void tesc_shader() {
   gltesc_LevelInner[0] = .5f * (gltesc_LevelOuter[1] + gltesc_LevelOuter[3]);
   gltesc_LevelInner[1] = .5f * (gltesc_LevelOuter[0] + gltesc_LevelOuter[2]);
 
-  gltesc_Output[gltesc_InvocationID].Position = 
-    gltesc_Input[gltesc_InvocationID].Position;
+  gltesc_Output.Position = gltesc_Input[gltesc_InvocationID].Position;
 }
 ```
 
 The control shader (tesc) is the first tessellation stage. It consumes a patch of vertices and analyzes them to set tessellation levels. It usually passes the input vertex patches through to the evaluation stage.
+
+**Compatibility Note:** Unlike in GLSL, output variables from tessellation control, including `gltesc_Output`, are not array types in Circle. When generating SPIR-V, these output variables are implicitly converted into arrays and indexed with `gltesc_InvocationID`, the only legal subscript. This change was made to bring compatibility with the DXIL backend, which only supports non-array type outputs in the domain stage.
 
 The Circle `spirv::tesc` attribute takes one argument: the number of patch vertices. This corresponds with a host call to `glPatchParameteri(GL_PATCH_VERTICES, count)` to set the patch size on the vertex array. This example also templates the tessellation levels logic. Note the four `get_level` calls:
 

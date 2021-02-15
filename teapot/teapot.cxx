@@ -64,7 +64,7 @@ struct tess_edge_t {
 };
 
 template<typename tess_t>
-[[spirv::tesc(16)]]
+[[spirv::tesc(quads, 16)]]
 void tesc_shader() {
   vec3 v00 = gltesc_Input[0].Position.xyz;
   vec3 v10 = gltesc_Input[3].Position.xyz;
@@ -82,14 +82,16 @@ void tesc_shader() {
   gltesc_LevelInner[0] = .5f * (gltesc_LevelOuter[1] + gltesc_LevelOuter[3]);
   gltesc_LevelInner[1] = .5f * (gltesc_LevelOuter[0] + gltesc_LevelOuter[2]);
 
-  gltesc_Output[gltesc_InvocationID].Position = 
-    gltesc_Input[gltesc_InvocationID].Position;
+  // Load from the patch array at gltesc_InvocationID.
+  // Write to the output position for gltesc_InvocationID.
+  gltesc_Output.Position = gltesc_Input[gltesc_InvocationID].Position;
 }
 
 [[using spirv: uniform, location(0)]]
 mat4 mat_view;
 
-[[spirv::tese(quads, fractional_even, ccw)]]
+// OpenGL requires output and spacing on the evaluation stage.
+[[using spirv: tese(quads), output(triangle_ccw), spacing(fractional_even)]]
 void tese_shader() {
   float u = gltese_TessCoord.x;
   float v = gltese_TessCoord.y;
@@ -125,7 +127,7 @@ void tese_shader() {
   // Use the xz plane angle to define a hue between 0 and 1.
   vec3 normal = normalize(cross(du, dv));
   float hue;
-  if(abs(normal.y) > .99)
+  if(abs(normal.y) > .99f)
     hue = 0;
   else 
     hue = (atan2(normal.x, normal.z) + M_PIf32) / (2 * M_PIf32);
