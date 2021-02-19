@@ -43,6 +43,7 @@ namespace imgui {
 // Return true if any option has changed.
 template<typename options_t>
 bool render_imgui(options_t& options, const char* child_name = nullptr) {
+  ImGui::SetColorEditOptions(ImGuiColorEditFlags_Float);
 
   bool changed = false;
   if(!child_name || 
@@ -134,6 +135,11 @@ bool render_imgui(options_t& options, const char* child_name = nullptr) {
       } else if constexpr(std::is_same_v<type_t, int>) {
         changed |= ImGui::DragInt(name, &value);
 
+      } else if constexpr(std::is_same_v<type_t, std::complex<float>>) {
+        float data[2] { value.real(), value.imag() };
+        changed |= ImGui::DragFloat2(name, data, .01f);
+        value.real(data[0]); value.imag(data[1]);
+
       } else if constexpr(std::is_class_v<type_t>) {
         // Iterate over each data member.
         changed |= render_imgui(value, name);
@@ -199,6 +205,119 @@ inline vec2 rot(vec2 p, vec2 pivot, float a) {
 inline vec2 rot(vec2 p, float a) {
   return rot(p, vec2(), a);
 }
+
+// https://github.com/hughsk/glsl-hsv2rgb/blob/master/index.glsl
+inline vec3 hsv2rgb(vec3 c) {
+  vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+  vec3 p = abs(fract(c.x + K.xyz) * 6 - K.w);
+  return c.z * mix(K.x, saturate(p - K.x), c.y);
+}
+
+struct [[
+  .imgui::title="mandelbrot orbit trap periods",
+  .imgui::url="https://www.shadertoy.com/view/Wl2Gz1"
+]] fractal_traps_t {
+  // orion elenzil 20190521
+  // inspired by https://www.shadertoy.com/view/wtfGWS
+
+  typedef std::complex<float> complex_t;
+
+  // Point of interest.
+  struct poi_t {
+    complex_t center;
+    float range;
+    int max_iter;
+  };
+
+  struct result_t {
+    int iterations;
+    int cycle_len1;
+    int cycle_len2;
+  };
+
+  result_t mandel_escape_iters(complex_t c, complex_t offset, float angle) {
+    complex_t c1 = std::polar(magnitude, angle);
+    complex_t c2 = c1 / magnitude * .2f;
+    c1 += offset;
+    c2 += offset;
+
+    complex_t z = c;
+
+    int cycle_len1 = 0, cycle_len2 = 0;
+    int i = 0;
+    while(i < max_iter) {
+      // Advance to the next iteration.
+      z = z * z + c;
+
+      if(!cycle_len1 && abs(1 - abs(z - c1)) < .015f)
+        cycle_len1 = i;
+
+      if(!cycle_len2 && abs(.2f - abs(z - c2)) < .01f)
+        cycle_len2 = i;
+
+      if(norm(z) > 4)
+        break;
+
+      ++i;
+    }
+
+    return { i, cycle_len1, cycle_len2 };
+  }
+
+  vec4 render(vec2 frag_coord, shadertoy_uniforms_t u) {
+    constexpr float PI2 = 2 * M_PIf32;
+    float short_len = min(u.resolution.x, u.resolution.y);
+    vec2 uv = (2 * frag_coord - u.resolution.xy) / short_len;
+
+    complex_t ocOff { };
+    if(any(u.mouse.xy > 50)) {
+      vec2 v = (2 * u.mouse.xy - u.resolution.xy) / short_len;
+      ocOff.real(v.x);
+      ocOff.imag(v.y);
+    }
+
+    vec3 color { };
+    complex_t c(uv.x, uv.y);
+    for(int m = 0; m < 2; ++m) {
+      for(int n = 0; n < 2; ++n) {
+        complex_t C = (c + complex_t(m, n) / complex_t(2.f * short_len)) * 
+          range + poi;
+        result_t result = mandel_escape_iters(C, ocOff, u.time * phase);
+        float f = result.iterations != max_iter ? 
+          (float)result.iterations / max_iter :
+          0.f;
+
+        f = pow(f, .6f);
+        f *= .82f;
+
+        vec3 rgb = f * base_color;
+        if(result.cycle_len1 > 0) {
+          rgb += vec3(cos(PI2 * result.cycle_len1 / sample_count1) * .2f + magnitude);
+        }
+        if(result.cycle_len2 > 0) {
+          float hue = fract((float)result.cycle_len2 / sample_count2);
+          rgb += hsv2rgb(vec3(hue, .9, .8));
+        }
+
+
+        color += rgb;
+      }
+    }
+
+    color /= 4;
+    return vec4(color, 1);
+  }
+
+  // TODO: Expose complex_t to imgui?
+  complex_t poi = complex_t(-.7105, 0.2466);
+  [[.imgui::color3]] vec3 base_color = { .2, .6, 1. };
+  [[.imgui::range_float { .01, 2 }]] float range = 2;
+  [[.imgui::range_int  { 4, 512 }]] int max_iter = 90;
+  [[.imgui::range_float { 0, 1 } ]] float magnitude = .3;
+  [[.imgui::range_float { 0, 2 * M_PIf32 }]] float phase = 1;
+  [[.imgui::range_int { 1, 50 } ]] int sample_count1 = 20;
+  [[.imgui::range_int { 1, 50 } ]] int sample_count2 = 30;
+};
 
 struct [[
   .imgui::title="Devil Egg",
@@ -2157,6 +2276,7 @@ struct [[
 ////////////////////////////////////////////////////////////////////////////////
 
 enum typename class shader_program_t {
+  fractal_traps_t,
   DevilEgg = devil_egg_t,
   HypnoBands = hypno_bands_t,
   Modulation = modulation_t,
