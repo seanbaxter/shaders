@@ -526,14 +526,14 @@ struct [[
     o += BackgroundColor;
     if(sd.x < 0)
       o -= sd.x * .6f;
-    o = clamp(o, 0.f, 1.f);
+    o = saturate(o);
 
     vec3 ayolk = 1 - smoothstep(0, fact * vec3(.2, .1, .2), sd.yyy);
     o = mix(o, YolkColor, ayolk);
     if(sd.y < 0)
       o -= sd.y * .1f;
 
-    o = clamp(o, 0.f, 1.f);
+    o = saturate(o);
     return o;
   }
 
@@ -560,7 +560,7 @@ struct [[
 
     o = pow(o, .5f);
     o += (hash32(frag_coord + t) - .5f) * FilmGrain;
-    o = clamp(o, 0.f, 1.f);
+    o = saturate(o);
     o *= 1 - length(13 * pow(abs(N), DarkEdge));
 
     return vec4(o, 1);
@@ -589,7 +589,7 @@ hypno_bands_t {
       return floor((x + (p * .5f)) / p) * p;
   }
   float dtoa(float d, float amount) {
-      return clamp(1 / (clamp(d, 1 / amount, 1.f) * amount), 0.f, 1.f);
+      return saturate(1 / (clamp(d, 1 / amount, 1.f) * amount));
   }
   float sdSegment1D(float uv, float a, float b) {
     return max(max(a - uv, 0.f), uv - b);
@@ -741,7 +741,7 @@ struct [[
       o = 1 - o;
 
     o *= 1 - dot(N, N * 2);
-    return vec4(clamp(o, 0, 1), 1);
+    return vec4(saturate(o), 1);
   }
 
   [[.imgui::range_float {   1,  10 }]] float Zoom = 5;
@@ -757,7 +757,7 @@ struct [[
   [[.imgui::range_float {  -2,   2 }]] float PhaseSpeed = .33;
   [[.imgui::range_float { -.1,  .1 }]] float WaveAmpOffset = .01;
   [[.imgui::color3]]                     vec3 Tint = vec3(.15, .5, .8);
-  bool InvertColors = false; 
+  bool InvertColors = true; 
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -885,7 +885,7 @@ struct [[
     o += (hash32(frag_coord + t) - .5f) * FilmGrain;
 
     o *= 1.1f - dot(N, N);
-    o = clamp(o, 0, 1);
+    o = saturate(o);
 
     return vec4(o, 1);
   }
@@ -932,7 +932,7 @@ struct [[
     vec4 o(c);
     vec3 col = vec3(
       // generate correlated colorants 0-1 from length, angle, exponent
-      clamp(l * l * l, 0.f, 1.f), 
+      saturate(l * l * l), 
       .5f * sin(a) + .5f,
       (ex - MinPow) / (MaxPow - MinPow)
     );
@@ -1207,7 +1207,7 @@ struct segment_tracer_t {
 struct blobs_t {
 
   float Falloff(float x, float R) const {
-    float xx = clamp(x / R, 0.f, 1.f);
+    float xx = saturate(x / R);
     float y = 1 - xx * xx;
     return y * y * y;
   }
@@ -1473,9 +1473,9 @@ struct [[
       float f = (float)i / AOSamples;
       float h = 0.1f + f * R;
       float d = map(p + n * h, time);
-      r += clamp(h * D - d, 0.f, 1.f) * (1 - f);
+      r += saturate(h * D - d) * (1 - f);
     }
-    return clamp(1 - r, 0.f, 1.f);
+    return saturate(1 - r);
   }
 
   float spheretracing(vec3 ori, vec3 dir, float time, vec3& p) {
@@ -1847,7 +1847,7 @@ struct capsule_t {
   float sd(vec3 p) const noexcept {
     p -= pos;
     vec3 pa = p - a, ba = b - a;
-    float h = clamp(dot(pa, ba) / dot2(ba), 0.f, 1.f);
+    float h = saturate(dot(pa, ba) / dot2(ba));
     return length(pa - ba * h) - r;
   }
 
@@ -1982,8 +1982,8 @@ struct cone_t {
     vec2 q = h * vec2(c.x, -c.y) / c.y;
     vec2 w(length(p.xz), p.y);
 
-    vec2 a = w - q * clamp(dot(w, q) / dot2(q), 0.f, 1.f);
-    vec2 b = w - q * vec2(clamp(w.x / q.x, 0.f, 1.f), 1.f);
+    vec2 a = w - q * saturate(dot(w, q) / dot2(q));
+    vec2 b = w - q * vec2(saturate(w.x / q.x), 1.f);
     float k = sign(q.y);
     float d = min(dot2(a), dot2(b));
     float s = max(k * (w.x * q.y - w.y * q.x), k * (w.y - q.y));
@@ -2004,7 +2004,7 @@ struct capped_cone_t {
     vec2 k1(r2, h);
     vec2 k2(r2 - r1, 2 * h);
     vec2 ca(q.x - min(q.x, q.y < 0 ? r1 : r2), abs(q.y) - h);
-    vec2 cb = q - k1 + k2 * clamp(dot(k1 - q, k2) / dot2(k2), 0.f, 1.f);
+    vec2 cb = q - k1 + k2 * saturate(dot(k1 - q, k2) / dot2(k2));
 
     float s = cb.x < 0 & ca.y < 0 ? -1.f : 1.f;
     return s * sqrt(min(dot2(ca), dot2(cb)));
@@ -2187,7 +2187,7 @@ struct [[
       if(occ > 0.35) 
         break;
     }
-    return clamp(1 - 3 * occ, 0.f, 1.f) * (0.5f + 0.5f * nor.y);
+    return saturate(1 - 3 * occ) * (0.5f + 0.5f * nor.y);
   }
 
   // http://iquilezles.org/www/articles/checkerfiltering/checkerfiltering.htm
@@ -2214,13 +2214,13 @@ struct [[
     float t = tmin;
     for(int i = 0; i < 24; ++i) {
       float h = map(ro + rd * t).x;
-      float s = clamp(8 * h / t, 0.f, 1.f);
+      float s = saturate(8 * h / t);
       res = min(res, s * s * (3 - 2 * s));
       t += clamp(h, 0.02f, 0.2f);
       if(res < 0.004f | t > tmax) 
         break;
     }
-    return clamp(res, 0.f, 1.f);
+    return saturate(res);
   }
 
   vec3 calcNormal(vec3 pos) const noexcept {
@@ -2302,12 +2302,12 @@ struct [[
       {
         vec3 lig = normalize(vec3(-.5, .4, -.6));
         vec3 hal = normalize(lig - rd);
-        float dif = clamp(dot(nor, lig), 0.f, 1.f);
+        float dif = saturate(dot(nor, lig));
 
         dif *= calcSoftshadow(pos, lig, 0.02, 2.5);
-        float spe = pow(clamp(dot(nor, hal), 0.f, 1.f), 16.f);
+        float spe = pow(saturate(dot(nor, hal)), 16.f);
         spe *= dif;
-        spe *= 0.04f + 0.96f * pow(clamp(1 - dot(hal, lig), 0.f, 1.f), 5.f);
+        spe *= 0.04f + 0.96f * pow(saturate(1 - dot(hal, lig)), 5.f);
         lin += col * 2.2f * dif * vec3(1.3, 1, 0.7);
         lin +=       5.0f * spe * vec3(1.3, 1, 0.7) * ks;
       }
@@ -2318,7 +2318,7 @@ struct [[
         dif *= occ;
         float spe = smoothstep(-.2f, .2f, ref.y);
         spe *= dif;
-        spe *= 0.04f + 0.96f * pow(clamp(1 + dot(nor, rd), 0.f, 1.f), 5.f);
+        spe *= 0.04f + 0.96f * pow(saturate(1 + dot(nor, rd)), 5.f);
         spe *= calcSoftshadow(pos, ref, .02, 2.5);
         lin += col * 0.6f * dif * vec3(0.4, 0.6, 1.15);
         lin +=       2.0f * spe * vec3(0.4, 0.6, 1.30) * ks;
@@ -2326,15 +2326,15 @@ struct [[
 
       // back
       {
-        float dif = clamp(dot(nor, normalize(vec3(0.5, 0.0, 0.6))), 0.f, 1.f) *
-          clamp(1 - pos.y, 0.f, 1.f);
+        float dif = saturate(dot(nor, normalize(vec3(0.5, 0.0, 0.6)))) *
+          saturate(1 - pos.y);
         dif *= occ;
         lin += col * 0.55f * dif * vec3(.25, .25, .25);
       }
 
       // sss
       {
-        float dif = pow(clamp(1 + dot(nor, rd), 0.f, 1.f), 2.f);
+        float dif = pow(saturate(1 + dot(nor, rd)), 2.f);
         dif *= occ;
         lin += col * .25f * dif * vec3(1);
       }
@@ -2343,7 +2343,7 @@ struct [[
       col = mix(col, vec3(0.7, 0.7, 0.9), 1 - exp(-.0001f * t * t * t));
     }
 
-    return vec3(clamp(col, 0.f, 1.f));
+    return vec3(saturate(col));
   }
 
   mat3 setCamera(vec3 ro, vec3 ta, float cr) const noexcept {
