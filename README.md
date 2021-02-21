@@ -32,6 +32,7 @@
 
     [![teapot](images/teapot_small.png)](#the-tessellation-stages)
     * [Tessellation control](#tessellation-control)
+    * [Tessellation patch constants](#tessellation-patch-constants)
     * [Tessellation evaluation](#tessellation-evaluation)
 
 1. [The compute stage](#the-compute-stage)
@@ -965,8 +966,45 @@ To generate a shader from the `tesc_shader` function template, we have to ODR us
 
 Note the `float edge_length = 100` defaulted data member. This default is not applied to the uniform buffer object itself, since interface variables are not _really_ instantiated. Instead, it applies to normal instantiations of the type on the host or on the GPU. In this example, its instantiated as a data member of `myapp_t` and copied into the uniform buffer each frame.
 
+### Tessellation patch constants
+
+HLSL requires that tessellation inner and outer factors be written by a _patch constant function_, not by the hull shader. In HLSL, the patch constant function is attached to the hull shader with a [`patchconstantfunc`](https://docs.microsoft.com/en-us/windows/win32/direct3d11/direct3d-11-advanced-stages-hull-shader-design) attribute. For compatibility with DXIL (the byte code language of HLSL), Circle C++ shaders supports a `dxil::patch_constant` attribute for tessellation control shader stages.
+
+[**teapot2/teapot2.cxx**](teapot2.cxx)
+```cpp
+template<typename tess_t>
+void patch_function() {
+  vec3 v00 = gltesc_Input[0].Position.xyz;
+  vec3 v10 = gltesc_Input[3].Position.xyz;
+  vec3 v01 = gltesc_Input[12].Position.xyz;
+  vec3 v11 = gltesc_Input[15].Position.xyz;
+
+  // Make a counter-clockwise pass from OL0 through OL3. See Figure 11.1 
+  // in OpenGL 4.6 specification.
+  gltesc_LevelOuter[0] = shader_ubo<0, tess_t>.get_level(v01, v00);
+  gltesc_LevelOuter[1] = shader_ubo<0, tess_t>.get_level(v00, v10);
+  gltesc_LevelOuter[2] = shader_ubo<0, tess_t>.get_level(v10, v11);
+  gltesc_LevelOuter[3] = shader_ubo<0, tess_t>.get_level(v11, v01);
+
+  // Average the opposing outer edges for inner edge levels.
+  gltesc_LevelInner[0] = .5f * (gltesc_LevelOuter[1] + gltesc_LevelOuter[3]);
+  gltesc_LevelInner[1] = .5f * (gltesc_LevelOuter[0] + gltesc_LevelOuter[2]);
+}
+
+template<typename tess_t>
+[[spirv::tesc(quads, 16), dxil::patch_constant(patch_function<tess_t>)]]
+void tesc_shader() {
+  gltesc_Output.Position = gltesc_Input[gltesc_InvocationID].Position;
+}
+```
+
+Factor the code that reads patch inputs and writes `gltesc_LevelOuter` and `gltesc_LevelInner` to its own patch function. This may be a function template, and it can be specialized from the `dxil::patch_constant` operand. HLSL's motivation is to allow the GPU to evaluate this function with just a single thread, since all all tess level outputs should be the same to avoid undefined behavior.
+
+Path constant functions are a cross-target mechanism in Circle shaders. Even though they aren't available in GLSL, they are in the Circle SPIR-V target, so use them, because you get DXIL support as well.
+
 ### Tessellation evaluation
 
+[**teapot/teapot.cxx**](teapot.cxx)
 ```cpp
 [[spirv::tese(quads, fractional_even, ccw)]]
 void tese_shader() {
@@ -4064,14 +4102,13 @@ There are many features in development:
 * Separated samplers/textures. (Vulkan only.)
 * Subpass inputs. (Vulkan only.)
 
-* A `#pragma spirv` namespace for issuing module-wide SPIR-V directives.
+* A `#pragma spirv` namespace for issuing module-wide SPIR-V and DXIL directives.
 
 * A pipeline-like markup for naming shaders which may appear in the same shader program. This will enable automatic assignment of resources bindings.
 
 Some larger features I want to get to ASAP:
 
 * A Circle compiler for Windows. I need Microsoft's cooperation in accessing the Visual C++ ABI docs for this to happen.
-* A Circle extension for DXIR, to support Direct3D programs.
 * A Circle extension for the PlayStation Shading Language (PSSL) binary format, to support PS4 and PS5.
 
 A single set of shader attributes can be rich enough for all three shader backend targets, so that the `spirv` attribute namespace can be replaced with the more generic `shader` namespace.

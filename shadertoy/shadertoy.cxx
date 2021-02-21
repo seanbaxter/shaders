@@ -21,6 +21,19 @@
 // Interlacing
 #include "adam7.hxx"
 
+template<typename type_t>
+const char* enum_to_string(type_t x) {
+  switch(x) {
+    @meta for enum(type_t e : type_t) {
+      case e:
+        return @enum_name(e);
+    }
+    default:
+      return "unknown";
+  }
+}
+
+
 namespace imgui {
   // imgui attribute tags.
   using color3   [[attribute]] = void;
@@ -135,6 +148,22 @@ bool render_imgui(options_t& options, const char* child_name = nullptr) {
       } else if constexpr(std::is_same_v<type_t, int>) {
         changed |= ImGui::DragInt(name, &value);
 
+      } else if constexpr(std::is_enum_v<type_t>) {
+
+        if(ImGui::BeginCombo(name, enum_to_string(value))) {
+          type_t cur = value;
+
+          @meta for enum(type_t e : type_t) {
+            if(ImGui::Selectable(@enum_name(e), e == cur))
+              value = e;
+            if(e == cur)
+              ImGui::SetItemDefaultFocus();
+          }
+          changed |= cur != value;
+
+          ImGui::EndCombo(); 
+        }
+
       } else if constexpr(std::is_same_v<type_t, std::complex<float>>) {
         float data[2] { value.real(), value.imag() };
         changed |= ImGui::DragFloat2(name, data, .01f);
@@ -213,8 +242,10 @@ inline vec3 hsv2rgb(vec3 c) {
   return c.z * mix(K.x, saturate(p - K.x), c.y);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 struct [[
-  .imgui::title="mandelbrot orbit trap periods",
+  .imgui::title="Mandelbrot Orbit Trap Periods",
   .imgui::url="https://www.shadertoy.com/view/Wl2Gz1"
 ]] fractal_traps_t {
   // orion elenzil 20190521
@@ -282,7 +313,7 @@ struct [[
       for(int n = 0; n < 2; ++n) {
         complex_t C = (c + complex_t(m, n) / complex_t(2.f * short_len)) * 
           range + poi;
-        result_t result = mandel_escape_iters(C, ocOff, u.time * phase);
+        result_t result = mandel_escape_iters(C, ocOff, u.time);
         float f = result.iterations != max_iter ? 
           (float)result.iterations / max_iter :
           0.f;
@@ -309,15 +340,138 @@ struct [[
   }
 
   // TODO: Expose complex_t to imgui?
-  complex_t poi = complex_t(-.7105, 0.2466);
+  complex_t poi = complex_t(-.2, 0);
   [[.imgui::color3]] vec3 base_color = { .2, .6, 1. };
-  [[.imgui::range_float { .01, 2 }]] float range = 2;
+  [[.imgui::range_float { .01, 2 }]] float range = 1.2;
   [[.imgui::range_int  { 4, 512 }]] int max_iter = 90;
   [[.imgui::range_float { 0, 1 } ]] float magnitude = .3;
-  [[.imgui::range_float { 0, 2 * M_PIf32 }]] float phase = 1;
   [[.imgui::range_int { 1, 50 } ]] int sample_count1 = 20;
   [[.imgui::range_int { 1, 50 } ]] int sample_count2 = 30;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct [[
+  .imgui::title="2D Clouds",
+  .imgui::url="https://www.shadertoy.com/view/4tdSWr"
+]] clouds_t {
+
+  vec2 hash(vec2 p) {
+    p = vec2(dot(p,vec2(127.1,311.7)), dot(p,vec2(269.5,183.3)));
+    return -1.0 + 2.0*fract(sin(p)*43758.5453123);
+  }
+
+  float noise(vec2 p) {
+    const float K1 = 0.366025404; // (sqrt(3)-1)/2;
+    const float K2 = 0.211324865; // (3-sqrt(3))/6;
+    vec2 i = floor(p + (p.x+p.y)*K1); 
+    vec2 a = p - i + (i.x+i.y)*K2;
+    vec2 o = (a.x>a.y) ? vec2(1.0,0.0) : vec2(0.0,1.0); //vec2 of = 0.5 + 0.5*vec2(sign(a.x-a.y), sign(a.y-a.x));
+    vec2 b = a - o + K2;
+    vec2 c = a - 1 + 2 * K2;
+    vec3 h = max(0.5f - vec3(dot(a,a), dot(b,b), dot(c,c)), 0.f );
+    vec3 n = h*h*h*h*vec3(dot(a,hash(i+0.0)), dot(b,hash(i+o)), dot(c,hash(i+1)));
+    return dot(n, vec3(70.0));  
+  }
+
+  float fbm(vec2 n) {
+    float total = 0.0, amplitude = 0.1;
+    for (int i = 0; i < 7; i++) {
+      total += noise(n) * amplitude;
+      n = m * n;
+      amplitude *= 0.4f;
+    }
+    return total;
+  }
+
+  vec4 render(vec2 frag_coord, shadertoy_uniforms_t u) {
+
+    vec2 p = frag_coord / u.resolution;
+    vec2 adjust(u.resolution.x / u.resolution.y, 1);
+    vec2 uv = p * adjust;
+    float q = fbm(uv * cloudscale * 0.5f);
+
+    // Don't make speed a tunable parameter, because we already use the 
+    // host's speed setting.
+    const float speed = .03;
+    float time = u.time * speed;
+    
+    //ridged noise shape
+    float r = 0.0;
+    uv *= cloudscale;
+    uv -= q - time;
+    float weight = 0.8;
+    for (int i=0; i<8; i++){
+      r += abs(weight*noise( uv ));
+      uv = m * uv + time;
+      weight *= 0.7f;
+    }
+    
+    //noise shape
+    float f = 0.0;
+    uv = p * adjust;
+    uv *= cloudscale;
+    uv -= q - time;
+    weight = 0.7;
+    for (int i=0; i<8; i++){
+      f += weight * noise(uv);
+      uv = m * uv + time;
+      weight *= 0.6f;
+    }
+    
+    f *= r + f;
+    
+    //noise colour
+    float c = 0.0;
+    time = u.time * speed * 2;
+    uv = p* adjust;
+    uv *= cloudscale * 2;
+    uv -= q - time;
+    weight = 0.4;
+    for (int i=0; i<7; i++){
+      c += weight * noise(uv);
+      uv = m * uv + time;
+      weight *= 0.6f;
+    }
+    
+    //noise ridge colour
+    float c1 = 0.0;
+    time = u.time * speed * 3;
+    uv = p * adjust;
+    uv *= cloudscale * 3;
+    uv -= q - time;
+    weight = 0.4;
+    for (int i=0; i<7; i++){
+      c1 += abs(weight*noise( uv ));
+      uv = m * uv + time;
+      weight *= 0.6f;
+    }
+  
+    c += c1;
+    
+    vec3 skycolour = mix(skycolour2, skycolour1, p.y);
+    vec3 cloudcolour = vec3(1.1, 1.1, 0.9) * 
+      saturate(clouddark + cloudlight * c);
+   
+    f = cloudcover + cloudalpha*f*r;
+    
+    vec3 result = mix(skycolour, saturate(skytint * skycolour + cloudcolour), 
+      saturate(f + c));
+    return vec4(result, 1);
+  }
+
+  [[.imgui::range_float { 0,  4 }]] float cloudscale = 1.1;
+  [[.imgui::range_float { 0,  1 }]] float clouddark = 0.5;
+  [[.imgui::range_float { 0,  1 }]] float cloudlight = 0.3;
+  [[.imgui::range_float { 0,  1 }]] float cloudcover = 0.6;
+  [[.imgui::range_float { 0, 10 }]] float cloudalpha = 8.0;
+  [[.imgui::range_float { 0,  1 }]] float skytint = 0.2;
+  [[.imgui::color3]] vec3 skycolour1 = vec3(0.2, 0.4, 0.6);
+  [[.imgui::color3]] vec3 skycolour2 = vec3(0.4, 0.7, 1.0);
+  mat2 m = mat2( 1.6,  1.2, -1.2,  1.6 );
+};
+
+////////////////////////////////////////////////////////////////////////////////
 
 struct [[
   .imgui::title="Devil Egg",
@@ -2275,8 +2429,125 @@ struct [[
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct [[
+  .imgui::title="wave intrinsics"
+]] wave_intrinsics_t {
+  float tex_pattern(vec2 texcoord) {
+    float scale = .13;
+    float t = sin(texcoord.x * scale) + cos(texcoord.y * scale);
+    float c = smoothstep(0.f, 0.2f, t * t);
+    return c;
+  }
+  
+  uint get_num_active_lanes() {
+    // Submit a flag for each active lane and add up the bits.
+    ivec4 bc = bitCount(gl_subgroupBallot(true));
+    uint num_active_lanes = bc.x + bc.y + bc.z + bc.w;
+    return num_active_lanes;
+  }
+
+  enum mode_t {
+    DefaultColoring,
+    ColorByLane,
+    FirstLaneWhite,
+    FirstWhiteLastRed,
+    ActiveLaneRatio,
+    BroadcastFirst,
+    AverageLanes,
+    PrefixSum,
+    QuadColoring,
+  };
+
+  vec4 render(vec2 frag_coord, shadertoy_uniforms_t u) {
+    vec2 pos = frag_coord;
+    float texP = tex_pattern(pos);
+    vec4 color = vec4(texP * pos / u.resolution, 0, 1);
+
+    if codegen(__is_spirv_target) {
+
+      switch(render_mode) {        
+        case DefaultColoring:
+          // Default coloring.
+          break;
+
+        case ColorByLane: {
+          // Color by lane ID.
+          float x = (float)gl_SubgroupInvocationID / gl_SubgroupSize;
+          color = vec4(x, x, x, 1);
+          break;
+        }
+
+        case FirstLaneWhite:
+          // Mark the first lane as white pixel.
+          if(gl_subgroupElect())
+            color = vec4(1);
+          break;
+
+        case FirstWhiteLastRed:
+          // Color the first lane white and the last active lane red.
+          if(gl_subgroupElect())
+            color = vec4(1);
+          else if(gl_SubgroupInvocationID == gl_subgroupMax(gl_SubgroupInvocationID))
+            color = vec4(1, 0, 0, 1);
+          break;
+     
+        case ActiveLaneRatio: {
+          float active_ratio = get_num_active_lanes() / float(gl_SubgroupSize);
+          color = vec4(active_ratio, active_ratio, active_ratio, 1);
+          break;
+        }
+        
+        case BroadcastFirst:
+          // Broadcast the color in the first lane.
+          color = gl_subgroupBroadcastFirst(color);
+          break;
+
+        case AverageLanes: {
+          // Paint the wave with the averaged color inside the wave.
+          color = gl_subgroupAdd(color) / get_num_active_lanes();
+          break;
+        }
+
+        case PrefixSum: {
+          // First, compute the prefix sum color each lane to first lane.
+          vec4 base_color = gl_subgroupBroadcastFirst(color);
+          vec4 prefix_color = gl_subgroupExclusiveAdd(color - base_color);
+
+          // Then, normalize by the number of active lanes.
+          color = prefix_color / get_num_active_lanes();
+          break;
+        }
+
+        case QuadColoring: {
+          float dx = gl_subgroupQuadSwapHorizontal(pos.x) - pos.x;
+          float dy = gl_subgroupQuadSwapVertical(pos.y) - pos.y;
+
+          if(dx > 0 && dy > 0)
+            color = vec4(1, 0, 0, 1);
+          else if(dx < 0 && dy > 0)
+            color = vec4(0, 1, 0, 1);
+          else if(dx > 0 && dy < 0)
+            color = vec4(0, 0, 1, 1);
+          else if(dx < 0 && dy < 0)
+            color = vec4(1, 1, 1, 1);
+          else
+            color = vec4(0, 0, 0, 1);
+          break;
+        }
+      }
+    }
+
+    return color;
+  }
+
+  mode_t render_mode = DefaultColoring;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 enum typename class shader_program_t {
   fractal_traps_t,
+  clouds_t,
   DevilEgg = devil_egg_t,
   HypnoBands = hypno_bands_t,
   Modulation = modulation_t,
@@ -2302,8 +2573,8 @@ enum typename class shader_program_t {
   Raymarcher = raymarch_prims_t,
   band_limited1_t,
   band_limited2_t,
+  wave_intrinsics_t
 };
-
 
 ////////////////////////////////////////////////////////////////////////////////
 
