@@ -11,6 +11,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "WaveIntrinsics", "WaveIntri
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "nbody", "nbody\nbody.vcxproj", "{5BF9B015-02CB-426C-8FDC-2A03384D0DBE}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "dxil-signing", "dxil-signing\dxil-signing.vcxproj", "{190FA3CB-63EC-42F4-A4E6-605234532C46}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -51,6 +53,14 @@ Global
 		{5BF9B015-02CB-426C-8FDC-2A03384D0DBE}.Release|x64.Build.0 = Release|x64
 		{5BF9B015-02CB-426C-8FDC-2A03384D0DBE}.Release|x86.ActiveCfg = Release|Win32
 		{5BF9B015-02CB-426C-8FDC-2A03384D0DBE}.Release|x86.Build.0 = Release|Win32
+		{190FA3CB-63EC-42F4-A4E6-605234532C46}.Debug|x64.ActiveCfg = Debug|x64
+		{190FA3CB-63EC-42F4-A4E6-605234532C46}.Debug|x64.Build.0 = Debug|x64
+		{190FA3CB-63EC-42F4-A4E6-605234532C46}.Debug|x86.ActiveCfg = Debug|Win32
+		{190FA3CB-63EC-42F4-A4E6-605234532C46}.Debug|x86.Build.0 = Debug|Win32
+		{190FA3CB-63EC-42F4-A4E6-605234532C46}.Release|x64.ActiveCfg = Release|x64
+		{190FA3CB-63EC-42F4-A4E6-605234532C46}.Release|x64.Build.0 = Release|x64
+		{190FA3CB-63EC-42F4-A4E6-605234532C46}.Release|x86.ActiveCfg = Release|Win32
+		{190FA3CB-63EC-42F4-A4E6-605234532C46}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
