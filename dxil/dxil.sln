@@ -1,0 +1,41 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.31005.135
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "shadertoy", "shadertoy\shadertoy.vcxproj", "{8A49F3D0-6B84-4314-91CC-9C936484C258}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "tessellation", "tessellation\tessellation.vcxproj", "{48201281-F953-4A7C-82C7-29D403D808A7}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8A49F3D0-6B84-4314-91CC-9C936484C258}.Debug|x64.ActiveCfg = Debug|x64
+		{8A49F3D0-6B84-4314-91CC-9C936484C258}.Debug|x64.Build.0 = Debug|x64
+		{8A49F3D0-6B84-4314-91CC-9C936484C258}.Debug|x86.ActiveCfg = Debug|Win32
+		{8A49F3D0-6B84-4314-91CC-9C936484C258}.Debug|x86.Build.0 = Debug|Win32
+		{8A49F3D0-6B84-4314-91CC-9C936484C258}.Release|x64.ActiveCfg = Release|x64
+		{8A49F3D0-6B84-4314-91CC-9C936484C258}.Release|x64.Build.0 = Release|x64
+		{8A49F3D0-6B84-4314-91CC-9C936484C258}.Release|x86.ActiveCfg = Release|Win32
+		{8A49F3D0-6B84-4314-91CC-9C936484C258}.Release|x86.Build.0 = Release|Win32
+		{48201281-F953-4A7C-82C7-29D403D808A7}.Debug|x64.ActiveCfg = Debug|x64
+		{48201281-F953-4A7C-82C7-29D403D808A7}.Debug|x64.Build.0 = Debug|x64
+		{48201281-F953-4A7C-82C7-29D403D808A7}.Debug|x86.ActiveCfg = Debug|Win32
+		{48201281-F953-4A7C-82C7-29D403D808A7}.Debug|x86.Build.0 = Debug|Win32
+		{48201281-F953-4A7C-82C7-29D403D808A7}.Release|x64.ActiveCfg = Release|x64
+		{48201281-F953-4A7C-82C7-29D403D808A7}.Release|x64.Build.0 = Release|x64
+		{48201281-F953-4A7C-82C7-29D403D808A7}.Release|x86.ActiveCfg = Release|Win32
+		{48201281-F953-4A7C-82C7-29D403D808A7}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {46C9E0C8-CAAB-44C2-A585-41ECF7BCC484}
+	EndGlobalSection
+EndGlobal
