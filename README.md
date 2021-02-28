@@ -81,7 +81,7 @@
 
     * [Shader parameters and push constants](#shader-parameters-and-push-constants)
     * [Chevron launches](#chevron-launches)
-    * [Physical storage buffers](#physcial-storage-buffers)
+    * [Physical storage buffers](#physical-storage-buffers)
     * [Lambda dispatch](#lambda-dispatch)
     * [Moderngpu for Vulkan](#moderngpu-for-Vulkan)
 
