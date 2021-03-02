@@ -1490,9 +1490,9 @@ struct [[
   }
 
   [[.imgui::range_float { 200, 2000 }]] float scale = 650;
-  int triangle_countours = false;
-  int triangle_pattern = true;
-  int grass = true;
+  bool triangle_countours = false;
+  bool triangle_pattern = true;
+  bool grass = true;
   interpolation_t interpolation = quintic;
 };
 
