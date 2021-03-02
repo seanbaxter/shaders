@@ -16,37 +16,32 @@
 
 // Shader interface helper variables.
 template<auto index, typename type_t = @enum_type(index)>
-[[using spirv: in, location((int)index)]]
+[[using spirv: in((int)index)]]
 type_t shader_in;
 
 template<auto index, typename type_t = @enum_type(index)>
-[[using spirv: out, location((int)index)]]
+[[using spirv: out((int)index)]]
 type_t shader_out;
 
 template<auto index, typename type_t = @enum_type(index)>
-[[using spirv: uniform, binding((int)index)]]
+[[using spirv: uniform((int)index)]]
 type_t shader_sampler;
 
 template<auto index, typename type_t = @enum_type(index)>
-[[using spirv: uniform, binding((int)index)]]
+[[using spirv: uniform((int)index)]]
 type_t shader_ubo;
 
 template<auto index, typename type_t = @enum_type(index)>
-[[using spirv: buffer, binding((int)index)]]
+[[using spirv: buffer((int)index)]]
 type_t shader_buffer;
 
 template<auto index, typename type_t = @enum_type(index)>
-[[using spirv: buffer, readonly, binding((int)index)]]
+[[using spirv: buffer((int)index), readonly]]
 type_t shader_readonly;
 
 template<auto index, typename type_t = @enum_type(index)>
-[[using spirv: buffer, writeonly, binding((int)index)]]
+[[using spirv: buffer((int)index), writeonly]]
 type_t shader_writeonly;
-
-template<auto index, typename type_t = @enum_type(index)>
-[[using spirv: uniform, location((int)index)]]
-type_t shader_uniform;
-
 
 template<typename type_t>
 const char* enum_to_string(type_t e) {

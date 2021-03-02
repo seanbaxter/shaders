@@ -1,4 +1,6 @@
-// CIRCLE SPIR-V SHADER EXTENSION IMPLICIT DECLARATIONS (build 100)
+// Forward declare D3D12_SHADER_BYTECODE.
+// @dxil() returns const D3D12_SHADER_BYTECODE&.
+struct D3D12_SHADER_BYTECODE;
 
 #ifdef SPIRV_IMPLICIT_NAMESPACE
 namespace SPIRV_IMPLICIT_NAMESPACE {
@@ -19,6 +21,14 @@ typedef int      ivec4   __attribute__((vector_size(16)));
 typedef unsigned uvec2   __attribute__((vector_size(8)));
 typedef unsigned uvec3   __attribute__((vector_size(12)));
 typedef unsigned uvec4   __attribute__((vector_size(16)));
+
+typedef int64_t  i64vec2 __attribute__((vector_size(16)));
+typedef int64_t  i64vec3 __attribute__((vector_size(24)));
+typedef int64_t  i64vec4 __attribute__((vector_size(32)));
+
+typedef uint64_t u64vec2 __attribute__((vector_size(16)));
+typedef uint64_t u64vec3 __attribute__((vector_size(24)));
+typedef uint64_t u64vec4 __attribute__((vector_size(32)));
 
 typedef bool     bvec2    __attribute__((vector_size(2)));
 typedef bool     bvec3    __attribute__((vector_size(3)));
@@ -280,6 +290,8 @@ GLSL_PREFIX dvec2  [[spirv::GLSLstd450(32)]] inversesqrt(dvec2  a) noexcept { re
 GLSL_PREFIX dvec3  [[spirv::GLSLstd450(32)]] inversesqrt(dvec3  a) noexcept { return __vector_apply(__builtin_rsqrt,  a); }
 GLSL_PREFIX dvec4  [[spirv::GLSLstd450(32)]] inversesqrt(dvec4  a) noexcept { return __vector_apply(__builtin_rsqrt,  a); }
 
+// 8.3 Common Functions
+
 GLSL_PREFIX float  [[spirv::GLSLstd450(4)]] abs(float  a) noexcept { return                __builtin_fabsf( a); }
 GLSL_PREFIX vec2   [[spirv::GLSLstd450(4)]] abs(vec2   a) noexcept { return __vector_apply(__builtin_fabsf, a); }
 GLSL_PREFIX vec3   [[spirv::GLSLstd450(4)]] abs(vec3   a) noexcept { return __vector_apply(__builtin_fabsf, a); }
@@ -410,6 +422,15 @@ GLSL_PREFIX uvec2  [[spirv::GLSLstd450(44)]] clamp(uvec2  x, uvec2  x0, uvec2  x
 GLSL_PREFIX uvec3  [[spirv::GLSLstd450(44)]] clamp(uvec3  x, uvec3  x0, uvec3  x1) noexcept { return min(max(x, x0), x1); }
 GLSL_PREFIX uvec4  [[spirv::GLSLstd450(44)]] clamp(uvec4  x, uvec4  x0, uvec4  x1) noexcept { return min(max(x, x0), x1); }
 
+GLSL_PREFIX float                            saturate(float  x) noexcept { return clamp(x, 0.f, 1.f); }
+GLSL_PREFIX vec2                             saturate(vec2   x) noexcept { return clamp(x, 0.f, 1.f); }
+GLSL_PREFIX vec3                             saturate(vec3   x) noexcept { return clamp(x, 0.f, 1.f); }
+GLSL_PREFIX vec4                             saturate(vec4   x) noexcept { return clamp(x, 0.f, 1.f); }
+GLSL_PREFIX double                           saturate(double x) noexcept { return clamp(x, 0.0, 1.0); }
+GLSL_PREFIX dvec2                            saturate(dvec2  x) noexcept { return clamp(x, 0.0, 1.0); }
+GLSL_PREFIX dvec3                            saturate(dvec3  x) noexcept { return clamp(x, 0.0, 1.0); }
+GLSL_PREFIX dvec4                            saturate(dvec4  x) noexcept { return clamp(x, 0.0, 1.0); }
+
 GLSL_PREFIX float  [[spirv::GLSLstd450(46)]] mix(float  x, float  y, float  a) noexcept { return x * (1 - a) + y * a; }
 GLSL_PREFIX vec2   [[spirv::GLSLstd450(46)]] mix(vec2   x, vec2   y, vec2   a) noexcept { return x * (1 - a) + y * a; }
 GLSL_PREFIX vec3   [[spirv::GLSLstd450(46)]] mix(vec3   x, vec3   y, vec3   a) noexcept { return x * (1 - a) + y * a; }
@@ -428,31 +449,48 @@ GLSL_PREFIX dvec2  [[spirv::GLSLstd450(48)]] step(dvec2  edge, dvec2  x) noexcep
 GLSL_PREFIX dvec3  [[spirv::GLSLstd450(48)]] step(dvec3  edge, dvec3  x) noexcept { return x >= edge ? 1.0 : 0.0; }
 GLSL_PREFIX dvec4  [[spirv::GLSLstd450(48)]] step(dvec4  edge, dvec4  x) noexcept { return x >= edge ? 1.0 : 0.0; }
 
-GLSL_PREFIX float  [[spirv::GLSLstd450(49)]] smoothstep(float  edge0, float  edge1, float  x) noexcept { float  t = clamp((x - edge0) / (edge1 - edge0), 0.f, 1.f); return t * t * (3 - 2 * t); }
-GLSL_PREFIX vec2   [[spirv::GLSLstd450(49)]] smoothstep(vec2   edge0, vec2   edge1, vec2   x) noexcept { vec2   t = clamp((x - edge0) / (edge1 - edge0), 0.f, 1.f); return t * t * (3 - 2 * t); }
-GLSL_PREFIX vec3   [[spirv::GLSLstd450(49)]] smoothstep(vec3   edge0, vec3   edge1, vec3   x) noexcept { vec3   t = clamp((x - edge0) / (edge1 - edge0), 0.f, 1.f); return t * t * (3 - 2 * t); }
-GLSL_PREFIX vec4   [[spirv::GLSLstd450(49)]] smoothstep(vec4   edge0, vec4   edge1, vec4   x) noexcept { vec4   t = clamp((x - edge0) / (edge1 - edge0), 0.f, 1.f); return t * t * (3 - 2 * t); }
-GLSL_PREFIX double [[spirv::GLSLstd450(49)]] smoothstep(double edge0, double edge1, double x) noexcept { double t = clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0); return t * t * (3 - 2 * t); }
-GLSL_PREFIX dvec2  [[spirv::GLSLstd450(49)]] smoothstep(dvec2  edge0, dvec2  edge1, dvec2  x) noexcept { dvec2  t = clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0); return t * t * (3 - 2 * t); }
-GLSL_PREFIX dvec3  [[spirv::GLSLstd450(49)]] smoothstep(dvec3  edge0, dvec3  edge1, dvec3  x) noexcept { dvec3  t = clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0); return t * t * (3 - 2 * t); }
-GLSL_PREFIX dvec4  [[spirv::GLSLstd450(49)]] smoothstep(dvec4  edge0, dvec4  edge1, dvec4  x) noexcept { dvec4  t = clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0); return t * t * (3 - 2 * t); }
+GLSL_PREFIX float  [[spirv::GLSLstd450(49)]] smoothstep(float  edge0, float  edge1, float  x) noexcept { float  t = saturate((x - edge0) / (edge1 - edge0)); return t * t * (3 - 2 * t); }
+GLSL_PREFIX vec2   [[spirv::GLSLstd450(49)]] smoothstep(vec2   edge0, vec2   edge1, vec2   x) noexcept { vec2   t = saturate((x - edge0) / (edge1 - edge0)); return t * t * (3 - 2 * t); }
+GLSL_PREFIX vec3   [[spirv::GLSLstd450(49)]] smoothstep(vec3   edge0, vec3   edge1, vec3   x) noexcept { vec3   t = saturate((x - edge0) / (edge1 - edge0)); return t * t * (3 - 2 * t); }
+GLSL_PREFIX vec4   [[spirv::GLSLstd450(49)]] smoothstep(vec4   edge0, vec4   edge1, vec4   x) noexcept { vec4   t = saturate((x - edge0) / (edge1 - edge0)); return t * t * (3 - 2 * t); }
+GLSL_PREFIX double [[spirv::GLSLstd450(49)]] smoothstep(double edge0, double edge1, double x) noexcept { double t = saturate((x - edge0) / (edge1 - edge0)); return t * t * (3 - 2 * t); }
+GLSL_PREFIX dvec2  [[spirv::GLSLstd450(49)]] smoothstep(dvec2  edge0, dvec2  edge1, dvec2  x) noexcept { dvec2  t = saturate((x - edge0) / (edge1 - edge0)); return t * t * (3 - 2 * t); }
+GLSL_PREFIX dvec3  [[spirv::GLSLstd450(49)]] smoothstep(dvec3  edge0, dvec3  edge1, dvec3  x) noexcept { dvec3  t = saturate((x - edge0) / (edge1 - edge0)); return t * t * (3 - 2 * t); }
+GLSL_PREFIX dvec4  [[spirv::GLSLstd450(49)]] smoothstep(dvec4  edge0, dvec4  edge1, dvec4  x) noexcept { dvec4  t = saturate((x - edge0) / (edge1 - edge0)); return t * t * (3 - 2 * t); }
 
-GLSL_PREFIX bvec2  [[spirv::opcode(156)]] isnan(vec2  a) noexcept { return __vector_apply(__builtin_isnanf, a); }
-GLSL_PREFIX bvec3  [[spirv::opcode(156)]] isnan(vec3  a) noexcept { return __vector_apply(__builtin_isnanf, a); }
-GLSL_PREFIX bvec4  [[spirv::opcode(156)]] isnan(vec4  a) noexcept { return __vector_apply(__builtin_isnanf, a); }
-GLSL_PREFIX bvec2  [[spirv::opcode(156)]] isnan(dvec2 a) noexcept { return __vector_apply(__builtin_isnan,  a); }
-GLSL_PREFIX bvec3  [[spirv::opcode(156)]] isnan(dvec3 a) noexcept { return __vector_apply(__builtin_isnan,  a); }
-GLSL_PREFIX bvec4  [[spirv::opcode(156)]] isnan(dvec4 a) noexcept { return __vector_apply(__builtin_isnan,  a); }
+GLSL_PREFIX bool   [[spirv::opcode(156)]] isnan(float  a) noexcept { return                __builtin_isnanf( a); }
+GLSL_PREFIX bvec2  [[spirv::opcode(156)]] isnan(vec2   a) noexcept { return __vector_apply(__builtin_isnanf, a); }
+GLSL_PREFIX bvec3  [[spirv::opcode(156)]] isnan(vec3   a) noexcept { return __vector_apply(__builtin_isnanf, a); }
+GLSL_PREFIX bvec4  [[spirv::opcode(156)]] isnan(vec4   a) noexcept { return __vector_apply(__builtin_isnanf, a); }
+extern "C"  bool   [[spirv::opcode(156)]] isnan(double a) noexcept;
+GLSL_PREFIX bvec2  [[spirv::opcode(156)]] isnan(dvec2  a) noexcept { return __vector_apply(__builtin_isnan,  a); }
+GLSL_PREFIX bvec3  [[spirv::opcode(156)]] isnan(dvec3  a) noexcept { return __vector_apply(__builtin_isnan,  a); }
+GLSL_PREFIX bvec4  [[spirv::opcode(156)]] isnan(dvec4  a) noexcept { return __vector_apply(__builtin_isnan,  a); }
 
-GLSL_PREFIX bvec2  [[spirv::opcode(157)]] isinf(vec2  a) noexcept { return __vector_apply(__builtin_isnanf, a); }
-GLSL_PREFIX bvec3  [[spirv::opcode(157)]] isinf(vec3  a) noexcept { return __vector_apply(__builtin_isnanf, a); }
-GLSL_PREFIX bvec4  [[spirv::opcode(157)]] isinf(vec4  a) noexcept { return __vector_apply(__builtin_isnanf, a); }
-GLSL_PREFIX bvec2  [[spirv::opcode(157)]] isinf(dvec2 a) noexcept { return __vector_apply(__builtin_isnan,  a); }
-GLSL_PREFIX bvec3  [[spirv::opcode(157)]] isinf(dvec3 a) noexcept { return __vector_apply(__builtin_isnan,  a); }
-GLSL_PREFIX bvec4  [[spirv::opcode(157)]] isinf(dvec4 a) noexcept { return __vector_apply(__builtin_isnan,  a); }
+GLSL_PREFIX bool   [[spirv::opcode(157)]] isinf(float  a) noexcept { return                __builtin_isinff( a); }
+GLSL_PREFIX bvec2  [[spirv::opcode(157)]] isinf(vec2   a) noexcept { return __vector_apply(__builtin_isinff, a); }
+GLSL_PREFIX bvec3  [[spirv::opcode(157)]] isinf(vec3   a) noexcept { return __vector_apply(__builtin_isinff, a); }
+GLSL_PREFIX bvec4  [[spirv::opcode(157)]] isinf(vec4   a) noexcept { return __vector_apply(__builtin_isinff, a); }
+extern "C"  bool   [[spirv::opcode(157)]] isinf(double a) noexcept;
+GLSL_PREFIX bvec2  [[spirv::opcode(157)]] isinf(dvec2  a) noexcept { return __vector_apply(__builtin_isinf,  a); }
+GLSL_PREFIX bvec3  [[spirv::opcode(157)]] isinf(dvec3  a) noexcept { return __vector_apply(__builtin_isinf,  a); }
+GLSL_PREFIX bvec4  [[spirv::opcode(157)]] isinf(dvec4  a) noexcept { return __vector_apply(__builtin_isinf,  a); }
+
+// https://www.khronos.org/registry/OpenGL/specs/gl/GLSLangSpec.4.60.html#floating-point-pack-and-unpack-functions
+GLSL_PREFIX uint  [[spirv::GLSLstd450(54)]]   packSnorm4x8(vec4 v) noexcept;
+GLSL_PREFIX uint  [[spirv::GLSLstd450(55)]]   packUnorm4x8(vec4 v) noexcept;
+GLSL_PREFIX uint  [[spirv::GLSLstd450(56)]]   packSnorm2x16(vec2 v) noexcept;
+GLSL_PREFIX uint  [[spirv::GLSLstd450(57)]]   packUnorm2x16(vec2 v) noexcept;
+GLSL_PREFIX uint  [[spirv::GLSLstd450(58)]]   packHalf2x16(vec2 v) noexcept;
+GLSL_PREFIX vec2  [[spirv::GLSLstd450(59)]]   packDouble2x32(uvec2 v) noexcept;
+GLSL_PREFIX vec2  [[spirv::GLSLstd450(60)]] unpackSnorm2x16(uint p) noexcept;
+GLSL_PREFIX vec2  [[spirv::GLSLstd450(61)]] unpackUnorm2x16(uint p) noexcept;
+GLSL_PREFIX vec2  [[spirv::GLSLstd450(62)]] unpackHalf2x16(uint p) noexcept;
+GLSL_PREFIX vec4  [[spirv::GLSLstd450(63)]] unpackSnorm4x8(uint p) noexcept;
+GLSL_PREFIX vec4  [[spirv::GLSLstd450(64)]] unpackUnorm4x8(uint p) noexcept;
+GLSL_PREFIX uvec2 [[spirv::GLSLstd450(65)]] unpackDouble2x32(double v) noexcept;
 
 // https://www.khronos.org/registry/OpenGL/specs/gl/GLSLangSpec.4.60.html#geometric-functions
-
 GLSL_PREFIX float  [[spirv::GLSLstd450(66)]] length(vec2  a) noexcept { return sqrt(__vector_dot(a, a)); }
 GLSL_PREFIX float  [[spirv::GLSLstd450(66)]] length(vec3  a) noexcept { return sqrt(__vector_dot(a, a)); }
 GLSL_PREFIX float  [[spirv::GLSLstd450(66)]] length(vec4  a) noexcept { return sqrt(__vector_dot(a, a)); }
@@ -522,12 +560,12 @@ GLSL_PREFIX double [[spirv::GLSLstd450(33)]] determinant(dmat2 m) noexcept;
 GLSL_PREFIX double [[spirv::GLSLstd450(33)]] determinant(dmat3 m) noexcept;
 GLSL_PREFIX double [[spirv::GLSLstd450(33)]] determinant(dmat4 m) noexcept;
 
-GLSL_PREFIX float  [[spirv::GLSLstd450(34)]] inverse(mat2  m) noexcept;
-GLSL_PREFIX float  [[spirv::GLSLstd450(34)]] inverse(mat3  m) noexcept;
-GLSL_PREFIX float  [[spirv::GLSLstd450(34)]] inverse(mat4  m) noexcept;
-GLSL_PREFIX double [[spirv::GLSLstd450(34)]] inverse(dmat2 m) noexcept;
-GLSL_PREFIX double [[spirv::GLSLstd450(34)]] inverse(dmat3 m) noexcept;
-GLSL_PREFIX double [[spirv::GLSLstd450(34)]] inverse(dmat4 m) noexcept;
+GLSL_PREFIX mat2  [[spirv::GLSLstd450(34)]] inverse(mat2  m) noexcept;
+GLSL_PREFIX mat3  [[spirv::GLSLstd450(34)]] inverse(mat3  m) noexcept;
+GLSL_PREFIX mat4  [[spirv::GLSLstd450(34)]] inverse(mat4  m) noexcept;
+GLSL_PREFIX dmat2 [[spirv::GLSLstd450(34)]] inverse(dmat2 m) noexcept;
+GLSL_PREFIX dmat3 [[spirv::GLSLstd450(34)]] inverse(dmat3 m) noexcept;
+GLSL_PREFIX dmat4 [[spirv::GLSLstd450(34)]] inverse(dmat4 m) noexcept;
 
 GLSL_PREFIX bool   [[spirv::opcode(154)]] any(bvec2 x) noexcept { return __vector_any(x); }
 GLSL_PREFIX bool   [[spirv::opcode(154)]] any(bvec3 x) noexcept { return __vector_any(x); }
@@ -537,6 +575,50 @@ GLSL_PREFIX bool   [[spirv::opcode(155)]] all(bvec3 x) noexcept { return __vecto
 GLSL_PREFIX bool   [[spirv::opcode(155)]] all(bvec4 x) noexcept { return __vector_all(x); }
 
 // 8.8 Integer Functions
+
+// TODO: Provide CPU implementation. Does this require a branch? shift left 32 is technically undefined.
+GLSL_PREFIX int    [[spirv::opcode(202)]] bitfieldExtract(int   x, int offset, int bits) noexcept;
+GLSL_PREFIX ivec2  [[spirv::opcode(202)]] bitfieldExtract(ivec2 x, int offset, int bits) noexcept { return __vector_apply(bitfieldExtract, x, offset, bits); }
+GLSL_PREFIX ivec3  [[spirv::opcode(202)]] bitfieldExtract(ivec3 x, int offset, int bits) noexcept { return __vector_apply(bitfieldExtract, x, offset, bits); }
+GLSL_PREFIX ivec4  [[spirv::opcode(202)]] bitfieldExtract(ivec4 x, int offset, int bits) noexcept { return __vector_apply(bitfieldExtract, x, offset, bits); }
+GLSL_PREFIX uint   [[spirv::opcode(203)]] bitfieldExtract(uint  x, int offset, int bits) noexcept;
+GLSL_PREFIX uvec2  [[spirv::opcode(203)]] bitfieldExtract(uvec2 x, int offset, int bits) noexcept { return __vector_apply(bitfieldExtract, x, offset, bits); }
+GLSL_PREFIX uvec3  [[spirv::opcode(203)]] bitfieldExtract(uvec3 x, int offset, int bits) noexcept { return __vector_apply(bitfieldExtract, x, offset, bits); }
+GLSL_PREFIX uvec4  [[spirv::opcode(203)]] bitfieldExtract(uvec4 x, int offset, int bits) noexcept { return __vector_apply(bitfieldExtract, x, offset, bits); }
+
+// Workaround for https://developer.nvidia.com/nvidia_bug/3266093
+GLSL_PREFIX int64_t bitfieldExtract(int64_t x, int offset, int bits) noexcept {
+  return ((1ll<< bits) - 1) & (x>> offset);
+}
+GLSL_PREFIX i64vec2 bitfieldExtract(i64vec2 x, int offset, int bits) noexcept { return __vector_apply(bitfieldExtract, x, offset, bits); }
+GLSL_PREFIX i64vec3 bitfieldExtract(i64vec3 x, int offset, int bits) noexcept { return __vector_apply(bitfieldExtract, x, offset, bits); }
+GLSL_PREFIX i64vec4 bitfieldExtract(i64vec4 x, int offset, int bits) noexcept { return __vector_apply(bitfieldExtract, x, offset, bits); }
+
+GLSL_PREFIX uint64_t bitfieldExtract(uint64_t x, int offset, int bits) noexcept {
+  return ((1ull<< bits) - 1) & (x>> offset); 
+}
+GLSL_PREFIX u64vec2 bitfieldExtract(u64vec2 x, int offset, int bits) noexcept { return __vector_apply(bitfieldExtract, x, offset, bits); }
+GLSL_PREFIX u64vec3 bitfieldExtract(u64vec3 x, int offset, int bits) noexcept { return __vector_apply(bitfieldExtract, x, offset, bits); }
+GLSL_PREFIX u64vec4 bitfieldExtract(u64vec4 x, int offset, int bits) noexcept { return __vector_apply(bitfieldExtract, x, offset, bits); }
+
+GLSL_PREFIX int    [[spirv::opcode(201)]] bitfieldInsert(int   x, int   y, int offset, int bits) noexcept;
+GLSL_PREFIX ivec2  [[spirv::opcode(201)]] bitfieldInsert(ivec2 x, ivec2 y, int offset, int bits) noexcept { return __vector_apply(bitfieldInsert, x, y, offset, bits); }
+GLSL_PREFIX ivec3  [[spirv::opcode(201)]] bitfieldInsert(ivec3 x, ivec3 y, int offset, int bits) noexcept { return __vector_apply(bitfieldInsert, x, y, offset, bits); }
+GLSL_PREFIX ivec4  [[spirv::opcode(201)]] bitfieldInsert(ivec4 x, ivec4 y, int offset, int bits) noexcept { return __vector_apply(bitfieldInsert, x, y, offset, bits); }
+GLSL_PREFIX uint   [[spirv::opcode(201)]] bitfieldInsert(uint  x, uint  y, int offset, int bits) noexcept;
+GLSL_PREFIX uvec2  [[spirv::opcode(201)]] bitfieldInsert(uvec2 x, uvec2 y, int offset, int bits) noexcept { return __vector_apply(bitfieldInsert, x, y, offset, bits); }
+GLSL_PREFIX uvec3  [[spirv::opcode(201)]] bitfieldInsert(uvec3 x, uvec3 y, int offset, int bits) noexcept { return __vector_apply(bitfieldInsert, x, y, offset, bits); }
+GLSL_PREFIX uvec4  [[spirv::opcode(201)]] bitfieldInsert(uvec4 x, uvec4 y, int offset, int bits) noexcept { return __vector_apply(bitfieldInsert, x, y, offset, bits); }
+
+GLSL_PREFIX int    [[spirv::opcode(204)]] bitfieldReverse(int   x) noexcept;
+GLSL_PREFIX ivec2  [[spirv::opcode(204)]] bitfieldReverse(ivec2 x) noexcept { return __vector_apply(bitfieldReverse, x); }
+GLSL_PREFIX ivec3  [[spirv::opcode(204)]] bitfieldReverse(ivec3 x) noexcept { return __vector_apply(bitfieldReverse, x); }
+GLSL_PREFIX ivec4  [[spirv::opcode(204)]] bitfieldReverse(ivec4 x) noexcept { return __vector_apply(bitfieldReverse, x); }
+GLSL_PREFIX uint   [[spirv::opcode(204)]] bitfieldReverse(uint  x) noexcept;
+GLSL_PREFIX uvec2  [[spirv::opcode(204)]] bitfieldReverse(uvec2 x) noexcept { return __vector_apply(bitfieldReverse, x); }
+GLSL_PREFIX uvec3  [[spirv::opcode(204)]] bitfieldReverse(uvec3 x) noexcept { return __vector_apply(bitfieldReverse, x); }
+GLSL_PREFIX uvec4  [[spirv::opcode(204)]] bitfieldReverse(uvec4 x) noexcept { return __vector_apply(bitfieldReverse, x); }
+
 GLSL_PREFIX int    [[spirv::opcode(205)]] bitCount(int   x) noexcept { return                __builtin_popcount( (uint) x); }
 GLSL_PREFIX ivec2  [[spirv::opcode(205)]] bitCount(ivec2 x) noexcept { return __vector_apply(__builtin_popcount, (uvec2)x); }
 GLSL_PREFIX ivec3  [[spirv::opcode(205)]] bitCount(ivec3 x) noexcept { return __vector_apply(__builtin_popcount, (uvec3)x); }
@@ -545,6 +627,68 @@ GLSL_PREFIX int    [[spirv::opcode(205)]] bitCount(uint  x) noexcept { return   
 GLSL_PREFIX ivec2  [[spirv::opcode(205)]] bitCount(uvec2 x) noexcept { return __vector_apply(__builtin_popcount, x); }
 GLSL_PREFIX ivec3  [[spirv::opcode(205)]] bitCount(uvec3 x) noexcept { return __vector_apply(__builtin_popcount, x); }
 GLSL_PREFIX ivec4  [[spirv::opcode(205)]] bitCount(uvec4 x) noexcept { return __vector_apply(__builtin_popcount, x); }
+
+// Results in the bit number of the least-significant 1-bit in the binary 
+// representation of Value. If Value is 0, the result is -1.
+GLSL_PREFIX int    [[spirv::GLSLstd450(73)]] findLSB(int   x) noexcept { return x ?                __builtin_ctz( (uint)x) : -1; }
+GLSL_PREFIX ivec2  [[spirv::GLSLstd450(73)]] findLSB(ivec2 x) noexcept { return x ? __vector_apply(__builtin_ctz, (uvec2)x) : -1; }
+GLSL_PREFIX ivec3  [[spirv::GLSLstd450(73)]] findLSB(ivec3 x) noexcept { return x ? __vector_apply(__builtin_ctz, (uvec3)x) : -1; }
+GLSL_PREFIX ivec4  [[spirv::GLSLstd450(73)]] findLSB(ivec4 x) noexcept { return x ? __vector_apply(__builtin_ctz, (uvec4)x) : -1; }
+GLSL_PREFIX int    [[spirv::GLSLstd450(73)]] findLSB(uint  x) noexcept { return x ?                __builtin_ctz( x) : -1; }
+GLSL_PREFIX ivec2  [[spirv::GLSLstd450(73)]] findLSB(uvec2 x) noexcept { return x ? __vector_apply(__builtin_ctz, x) : -1; }
+GLSL_PREFIX ivec3  [[spirv::GLSLstd450(73)]] findLSB(uvec3 x) noexcept { return x ? __vector_apply(__builtin_ctz, x) : -1; }
+GLSL_PREFIX ivec4  [[spirv::GLSLstd450(73)]] findLSB(uvec4 x) noexcept { return x ? __vector_apply(__builtin_ctz, x) : -1; }
+
+// For positive numbers, the result will be the bit number of the most 
+// significant 1-bit. For negative numbers, the result will be the bit number 
+// of the most significant 0-bit. For a Value of 0 or -1, the result is -1.
+GLSL_PREFIX int    [[spirv::GLSLstd450(74)]] findMSB(int   x) noexcept { x ^= x>> 31; return x ?                __builtin_clz( (uint)x) : -1; }
+GLSL_PREFIX ivec2  [[spirv::GLSLstd450(74)]] findMSB(ivec2 x) noexcept { x ^= x>> 31; return x ? __vector_apply(__builtin_clz, (uvec2)x) : -1; }
+GLSL_PREFIX ivec3  [[spirv::GLSLstd450(74)]] findMSB(ivec3 x) noexcept { x ^= x>> 31; return x ? __vector_apply(__builtin_clz, (uvec3)x) : -1; }
+GLSL_PREFIX ivec4  [[spirv::GLSLstd450(74)]] findMSB(ivec4 x) noexcept { x ^= x>> 31; return x ? __vector_apply(__builtin_clz, (uvec4)x) : -1; }
+GLSL_PREFIX int    [[spirv::GLSLstd450(75)]] findMSB(uint  x) noexcept {              return x ?                __builtin_clz( x) : -1; }
+GLSL_PREFIX ivec2  [[spirv::GLSLstd450(75)]] findMSB(uvec2 x) noexcept {              return x ? __vector_apply(__builtin_clz, x) : -1; }
+GLSL_PREFIX ivec3  [[spirv::GLSLstd450(75)]] findMSB(uvec3 x) noexcept {              return x ? __vector_apply(__builtin_clz, x) : -1; }
+GLSL_PREFIX ivec4  [[spirv::GLSLstd450(75)]] findMSB(uvec4 x) noexcept {              return x ? __vector_apply(__builtin_clz, x) : -1; }
+
+// reinterpret_cast bitcasts are coded into the CFG.
+GLSL_PREFIX [[spirv::builtin]] int   floatBitsToInt(float x) noexcept { return *reinterpret_cast<const int*>(&x);      }
+GLSL_PREFIX [[spirv::builtin]] ivec2 floatBitsToInt(vec2  x) noexcept { return __vector_apply(floatBitsToInt(0.f), x); }
+GLSL_PREFIX [[spirv::builtin]] ivec3 floatBitsToInt(vec3  x) noexcept { return __vector_apply(floatBitsToInt(0.f), x); }
+GLSL_PREFIX [[spirv::builtin]] ivec4 floatBitsToInt(vec4  x) noexcept { return __vector_apply(floatBitsToInt(0.f), x); }
+
+GLSL_PREFIX [[spirv::builtin]] uint  floatBitsToUint(float x) noexcept { return *reinterpret_cast<const uint*>(&x);      }
+GLSL_PREFIX [[spirv::builtin]] uvec2 floatBitsToUint(vec2  x) noexcept { return __vector_apply(floatBitsToUint(0.f), x); }
+GLSL_PREFIX [[spirv::builtin]] uvec3 floatBitsToUint(vec3  x) noexcept { return __vector_apply(floatBitsToUint(0.f), x); }
+GLSL_PREFIX [[spirv::builtin]] uvec4 floatBitsToUint(vec4  x) noexcept { return __vector_apply(floatBitsToUint(0.f), x); }
+
+GLSL_PREFIX [[spirv::builtin]] float intBitsToFloat(int   x) noexcept { return *reinterpret_cast<const float*>(&x);  }
+GLSL_PREFIX [[spirv::builtin]] vec2  intBitsToFloat(ivec2 x) noexcept { return __vector_apply(intBitsToFloat(0), x); }
+GLSL_PREFIX [[spirv::builtin]] vec3  intBitsToFloat(ivec3 x) noexcept { return __vector_apply(intBitsToFloat(0), x); }
+GLSL_PREFIX [[spirv::builtin]] vec4  intBitsToFloat(ivec4 x) noexcept { return __vector_apply(intBitsToFloat(0), x); }
+
+GLSL_PREFIX [[spirv::builtin]] float uintBitsToFloat(uint  x) noexcept { return *reinterpret_cast<const float*>(&x);   }
+GLSL_PREFIX [[spirv::builtin]] vec2  uintBitsToFloat(uvec2 x) noexcept { return __vector_apply(uintBitsToFloat(0u), x); }
+GLSL_PREFIX [[spirv::builtin]] vec3  uintBitsToFloat(uvec3 x) noexcept { return __vector_apply(uintBitsToFloat(0u), x); }
+GLSL_PREFIX [[spirv::builtin]] vec4  uintBitsToFloat(uvec4 x) noexcept { return __vector_apply(uintBitsToFloat(0u), x); }
+
+GLSL_PREFIX float  [[spirv::GLSLstd450(51)]] frexp(float  x, int*   y) noexcept { return                __builtin_frexpf( x, y); }
+GLSL_PREFIX vec2   [[spirv::GLSLstd450(51)]] frexp(vec2   x, ivec2* y) noexcept { return __vector_apply(__builtin_frexpf, x, y); }
+GLSL_PREFIX vec3   [[spirv::GLSLstd450(51)]] frexp(vec3   x, ivec3* y) noexcept { return __vector_apply(__builtin_frexpf, x, y); }
+GLSL_PREFIX vec4   [[spirv::GLSLstd450(51)]] frexp(vec4   x, ivec4* y) noexcept { return __vector_apply(__builtin_frexpf, x, y); }
+extern "C"  double [[spirv::GLSLstd450(51)]] frexp(double x, int*   y) noexcept;
+GLSL_PREFIX dvec2  [[spirv::GLSLstd450(51)]] frexp(dvec2  x, ivec2* y) noexcept { return __vector_apply(__builtin_frexp,  x, y); }
+GLSL_PREFIX dvec3  [[spirv::GLSLstd450(51)]] frexp(dvec3  x, ivec3* y) noexcept { return __vector_apply(__builtin_frexp,  x, y); }
+GLSL_PREFIX dvec4  [[spirv::GLSLstd450(51)]] frexp(dvec4  x, ivec4* y) noexcept { return __vector_apply(__builtin_frexp,  x, y); }
+
+GLSL_PREFIX float  [[spirv::GLSLstd450(53)]] ldexp(float  x, int   y) noexcept { return                __builtin_ldexpf( x, y); }
+GLSL_PREFIX vec2   [[spirv::GLSLstd450(53)]] ldexp(vec2   x, ivec2 y) noexcept { return __vector_apply(__builtin_ldexpf, x, y); }
+GLSL_PREFIX vec3   [[spirv::GLSLstd450(53)]] ldexp(vec3   x, ivec3 y) noexcept { return __vector_apply(__builtin_ldexpf, x, y); }
+GLSL_PREFIX vec4   [[spirv::GLSLstd450(53)]] ldexp(vec4   x, ivec4 y) noexcept { return __vector_apply(__builtin_ldexpf, x, y); }
+extern "C"  double [[spirv::GLSLstd450(53)]] ldexp(double x, int   y) noexcept;
+GLSL_PREFIX dvec2  [[spirv::GLSLstd450(53)]] ldexp(dvec2  x, ivec2 y) noexcept { return __vector_apply(__builtin_ldexp,  x, y); }
+GLSL_PREFIX dvec3  [[spirv::GLSLstd450(53)]] ldexp(dvec3  x, ivec3 y) noexcept { return __vector_apply(__builtin_ldexp,  x, y); }
+GLSL_PREFIX dvec4  [[spirv::GLSLstd450(53)]] ldexp(dvec4  x, ivec4 y) noexcept { return __vector_apply(__builtin_ldexp,  x, y); }
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -556,67 +700,75 @@ enum class gl_layout_t : unsigned {
 
 // https://www.khronos.org/registry/OpenGL/specs/gl/GLSLangSpec.4.60.html#built-in-variables
 struct [[spirv::block]] gl_PerVertex {
-  [[spirv::builtin]] vec4  Position;
-  [[spirv::builtin]] float PointSize;
-  [[spirv::builtin]] float ClipDistance[1];
-  [[spirv::builtin]] float CullDistance[1];
+  [[spirv::builtin(0)]] vec4  Position;
+  [[spirv::builtin(1)]] float PointSize;
+  [[spirv::builtin(3)]] float ClipDistance[4];
+  [[spirv::builtin(4)]] float CullDistance[4];
 };
 
 // Vertex variables.
-[[spirv::builtin]] int          glvert_VertexID;      // GL only
-[[spirv::builtin]] int          glvert_VertexIndex;   // Vulkan only
-[[spirv::builtin]] int          glvert_InstanceID;    // GL only
-[[spirv::builtin]] int          glvert_InstanceIndex; // Vulkan only
-[[spirv::builtin]] int          glvert_DrawID;
-[[spirv::builtin]] int          glvert_BaseVertex;
-[[spirv::builtin]] int          glvert_BaseInstance;
-[[spirv::out    ]] gl_PerVertex glvert_Output;        // output
+[[spirv::builtin(5)   ]] int          glvert_VertexID;      // GL only
+[[spirv::builtin(42)  ]] int          glvert_VertexIndex;   // Vulkan only
+[[spirv::builtin(6)   ]] int          glvert_InstanceID;    // GL only
+[[spirv::builtin(43)  ]] int          glvert_InstanceIndex; // Vulkan only
+[[spirv::builtin(4426)]] int          glvert_DrawID;
+[[spirv::builtin(4424)]] int          glvert_BaseVertex;
+[[spirv::builtin(4425)]] int          glvert_BaseInstance;
+
+[[spirv::out]] gl_PerVertex glvert_Output;
 
 // Tessellation control variables.
-[[spirv::in     ]] gl_PerVertex gltesc_Input[32];
-[[spirv::builtin]] int          gltesc_PatchVerticesIn;
-[[spirv::builtin]] int          gltesc_PrimitiveID;
-[[spirv::builtin]] int          gltesc_InvocationID;
-[[spirv::out    ]] gl_PerVertex gltesc_Output[16];     // output
-[[spirv::builtin]] float        gltesc_LevelOuter[4]; // output
-[[spirv::builtin]] float        gltesc_LevelInner[2]; // output
+[[spirv::builtin(14)]] int          gltesc_PatchVerticesIn;
+[[spirv::builtin(7) ]] int          gltesc_PrimitiveID;
+[[spirv::builtin(8) ]] int          gltesc_InvocationID;
+
+[[spirv::builtin(11), spirv::out, spirv::patch]] float gltesc_LevelOuter[4]; // output
+[[spirv::builtin(12), spirv::out, spirv::patch]] float gltesc_LevelInner[2]; // output
+
+[[spirv::out]] gl_PerVertex gltesc_Output;      // Implicitly gltech_Output[gltesc_InvocationID].
+[[spirv::in ]] gl_PerVertex gltesc_Input[32];
 
 // OpControlBarrier
 [[spirv::builtin]] void         gltesc_barrier();
 
 // Tessellation evaluation variables.
-[[spirv::in     ]] gl_PerVertex gltese_Input[32];
-[[spirv::builtin]] int          gltese_PatchVerticesIn;
-[[spirv::builtin]] int          gltese_PrimitiveID;
-[[spirv::builtin]] vec3         gltese_TessCoord;
-[[spirv::builtin]] float        gltese_LevelOuter[4];
-[[spirv::builtin]] float        gltese_LevelInner[2];
-[[spirv::out    ]] gl_PerVertex gltese_Output;        // output
+[[spirv::in     ]]     gl_PerVertex gltese_Input[32];
+[[spirv::builtin(14)]] int          gltese_PatchVerticesIn;
+[[spirv::builtin(7) ]] int          gltese_PrimitiveID;
+[[spirv::builtin(13)]] vec3         gltese_TessCoord;
+[[spirv::builtin(11), spirv::patch]] float        gltese_LevelOuter[4];
+[[spirv::builtin(12), spirv::patch]] float        gltese_LevelInner[2];
 
-enum class gltese_primitive_t : unsigned {
+[[spirv::out]] gl_PerVertex gltese_Output;        // output
+
+enum class gltess_primitive_t : unsigned {
   triangles,
   quads,
   isolines,
 };
 
-enum class gltese_spacing_t : unsigned {
+enum class gltess_output_t : unsigned {
+ points,
+ lines,
+ triangle_cw,
+ triangle_ccw,
+};
+
+enum class gltess_spacing_t : unsigned {
   equal,
   fractional_even,
   fractional_odd,
 };
 
-enum class gltese_ordering_t : unsigned {
- cw,
- ccw, 
-};
-
 // Geometry variables.
-[[spirv::in     ]] gl_PerVertex glgeom_Input[6];
-[[spirv::builtin]] int          glgeom_PrimitiveIDIn;
-[[spirv::out    ]] gl_PerVertex glgeom_Output;        // output
-[[spirv::builtin]] int          glgeom_PrimitiveID;   // output
-[[spirv::builtin]] int          glgeom_Layer;         // output
-[[spirv::builtin]] int          glgeom_ViewportIndex; // output
+[[spirv::in]] gl_PerVertex glgeom_Input[6];
+[[spirv::out]] gl_PerVertex glgeom_Output;
+
+[[spirv::builtin(7)             ]] int          glgeom_PrimitiveIDIn;
+[[spirv::builtin(8)             ]] int          glgeom_InvocationID;
+[[spirv::builtin(7),  spirv::out]] int          glgeom_PrimitiveID;   // output
+[[spirv::builtin(9),  spirv::out]] int          glgeom_Layer;         // output
+[[spirv::builtin(10), spirv::out]] int          glgeom_ViewportIndex; // output
 [[spirv::builtin]] void         glgeom_EmitVertex() noexcept;
 [[spirv::builtin]] void         glgeom_EndPrimitive() noexcept;
 [[spirv::builtin]] void         glgeom_EmitStreamVertex(int stream) noexcept;
@@ -637,65 +789,68 @@ enum class glgeom_output_t : unsigned {
 };
 
 // Fragment variables.
-[[spirv::builtin]] vec4         glfrag_FragCoord;
-[[spirv::builtin]] bool         glfrag_FrontFacing;
-[[spirv::builtin]] float        glfrag_ClipDistance[1];
-[[spirv::builtin]] float        glfrag_CullDistance[1];
-[[spirv::builtin]] vec2         glfrag_PointCoord;
-[[spirv::builtin]] int          glfrag_PrimitiveID;
-[[spirv::builtin]] int          glfrag_SampleID;
-[[spirv::builtin]] vec2         glfrag_SamplePosition;
-[[spirv::builtin]] int          glfrag_SampleMaskIn[1];
-[[spirv::builtin]] int          glfrag_Layer;
-[[spirv::builtin]] int          glfrag_ViewportIndex;
-[[spirv::builtin]] bool         glfrag_HelperInvocation;
-[[spirv::builtin]] float        glfrag_FragDepth;      // output
-[[spirv::builtin]] int          glfrag_SampleMask[1];  // output
+[[spirv::builtin(15)]] vec4  glfrag_FragCoord;
+[[spirv::builtin(17)]] bool  glfrag_FrontFacing;
+[[spirv::builtin(3) ]] float glfrag_ClipDistance[4];
+[[spirv::builtin(4) ]] float glfrag_CullDistance[4];
+[[spirv::builtin(16)]] vec2  glfrag_PointCoord;
+[[spirv::builtin(7) ]] int   glfrag_PrimitiveID;
+[[spirv::builtin(18)]] int   glfrag_SampleID;
+[[spirv::builtin(19)]] vec2  glfrag_SamplePosition;
+[[spirv::builtin(20)]] int   glfrag_SampleMaskIn[1];
+[[spirv::builtin(9) ]] int   glfrag_Layer;
+[[spirv::builtin(10)]] int   glfrag_ViewportIndex;
+[[spirv::builtin(23)]] bool  glfrag_HelperInvocation;
 
-[[spirv::builtin]] float        glfrag_dFdx(float x) noexcept;
-[[spirv::builtin]] vec2         glfrag_dFdx(vec2 x)  noexcept;
-[[spirv::builtin]] vec3         glfrag_dFdx(vec3 x)  noexcept;
-[[spirv::builtin]] vec4         glfrag_dFdx(vec4 x)  noexcept;
+[[spirv::builtin(22), spirv::out]] float glfrag_FragDepth;
+[[spirv::builtin(2),  spirv::out]] int   glfrag_SampleMask[1];
 
-[[spirv::builtin]] float        glfrag_dFdy(float x) noexcept;
-[[spirv::builtin]] vec2         glfrag_dFdy(vec2 x)  noexcept;
-[[spirv::builtin]] vec3         glfrag_dFdy(vec3 x)  noexcept;
-[[spirv::builtin]] vec4         glfrag_dFdy(vec4 x)  noexcept;
+[[spirv::builtin]]     void         glfrag_discard() noexcept;
 
-[[spirv::builtin]] float        glfrag_fwidth(float x) noexcept;
-[[spirv::builtin]] vec2         glfrag_fwidth(vec2 x)  noexcept;
-[[spirv::builtin]] vec3         glfrag_fwidth(vec3 x)  noexcept;
-[[spirv::builtin]] vec4         glfrag_fwidth(vec4 x)  noexcept;
+[[spirv::opcode(207)]] float        glfrag_dFdx(float x) noexcept;
+[[spirv::opcode(207)]] vec2         glfrag_dFdx(vec2 x)  noexcept;
+[[spirv::opcode(207)]] vec3         glfrag_dFdx(vec3 x)  noexcept;
+[[spirv::opcode(207)]] vec4         glfrag_dFdx(vec4 x)  noexcept;
 
-[[spirv::builtin]] float        glfrag_dFdxCoarse(float x) noexcept;
-[[spirv::builtin]] vec2         glfrag_dFdxCoarse(vec2 x)  noexcept;
-[[spirv::builtin]] vec3         glfrag_dFdxCoarse(vec3 x)  noexcept;
-[[spirv::builtin]] vec4         glfrag_dFdxCoarse(vec4 x)  noexcept;
+[[spirv::opcode(208)]] float        glfrag_dFdy(float x) noexcept;
+[[spirv::opcode(208)]] vec2         glfrag_dFdy(vec2 x)  noexcept;
+[[spirv::opcode(208)]] vec3         glfrag_dFdy(vec3 x)  noexcept;
+[[spirv::opcode(208)]] vec4         glfrag_dFdy(vec4 x)  noexcept;
 
-[[spirv::builtin]] float        glfrag_dFdyCoarse(float x) noexcept;
-[[spirv::builtin]] vec2         glfrag_dFdyCoarse(vec2 x)  noexcept;
-[[spirv::builtin]] vec3         glfrag_dFdyCoarse(vec3 x)  noexcept;
-[[spirv::builtin]] vec4         glfrag_dFdyCoarse(vec4 x)  noexcept;
+[[spirv::opcode(209)]] float        glfrag_fwidth(float x) noexcept;
+[[spirv::opcode(209)]] vec2         glfrag_fwidth(vec2 x)  noexcept;
+[[spirv::opcode(209)]] vec3         glfrag_fwidth(vec3 x)  noexcept;
+[[spirv::opcode(209)]] vec4         glfrag_fwidth(vec4 x)  noexcept;
 
-[[spirv::builtin]] float        glfrag_fwidthCoarse(float x) noexcept;
-[[spirv::builtin]] vec2         glfrag_fwidthCoarse(vec2 x)  noexcept;
-[[spirv::builtin]] vec3         glfrag_fwidthCoarse(vec3 x)  noexcept;
-[[spirv::builtin]] vec4         glfrag_fwidthCoarse(vec4 x)  noexcept;
+[[spirv::opcode(213)]] float        glfrag_dFdxCoarse(float x) noexcept;
+[[spirv::opcode(213)]] vec2         glfrag_dFdxCoarse(vec2 x)  noexcept;
+[[spirv::opcode(213)]] vec3         glfrag_dFdxCoarse(vec3 x)  noexcept;
+[[spirv::opcode(213)]] vec4         glfrag_dFdxCoarse(vec4 x)  noexcept;
 
-[[spirv::builtin]] float        glfrag_dFdxFine(float x) noexcept;
-[[spirv::builtin]] vec2         glfrag_dFdxFine(vec2 x)  noexcept;
-[[spirv::builtin]] vec3         glfrag_dFdxFine(vec3 x)  noexcept;
-[[spirv::builtin]] vec4         glfrag_dFdxFine(vec4 x)  noexcept;
+[[spirv::opcode(214)]] float        glfrag_dFdyCoarse(float x) noexcept;
+[[spirv::opcode(214)]] vec2         glfrag_dFdyCoarse(vec2 x)  noexcept;
+[[spirv::opcode(214)]] vec3         glfrag_dFdyCoarse(vec3 x)  noexcept;
+[[spirv::opcode(214)]] vec4         glfrag_dFdyCoarse(vec4 x)  noexcept;
 
-[[spirv::builtin]] float        glfrag_dFdyFine(float x) noexcept;
-[[spirv::builtin]] vec2         glfrag_dFdyFine(vec2 x)  noexcept;
-[[spirv::builtin]] vec3         glfrag_dFdyFine(vec3 x)  noexcept;
-[[spirv::builtin]] vec4         glfrag_dFdyFine(vec4 x)  noexcept;
+[[spirv::opcode(215)]] float        glfrag_fwidthCoarse(float x) noexcept;
+[[spirv::opcode(215)]] vec2         glfrag_fwidthCoarse(vec2 x)  noexcept;
+[[spirv::opcode(215)]] vec3         glfrag_fwidthCoarse(vec3 x)  noexcept;
+[[spirv::opcode(215)]] vec4         glfrag_fwidthCoarse(vec4 x)  noexcept;
 
-[[spirv::builtin]] float        glfrag_fwidthFine(float x) noexcept;
-[[spirv::builtin]] vec2         glfrag_fwidthFine(vec2 x)  noexcept;
-[[spirv::builtin]] vec3         glfrag_fwidthFine(vec3 x)  noexcept;
-[[spirv::builtin]] vec4         glfrag_fwidthFine(vec4 x)  noexcept;
+[[spirv::opcode(210)]] float        glfrag_dFdxFine(float x) noexcept;
+[[spirv::opcode(210)]] vec2         glfrag_dFdxFine(vec2 x)  noexcept;
+[[spirv::opcode(210)]] vec3         glfrag_dFdxFine(vec3 x)  noexcept;
+[[spirv::opcode(210)]] vec4         glfrag_dFdxFine(vec4 x)  noexcept;
+
+[[spirv::opcode(211)]] float        glfrag_dFdyFine(float x) noexcept;
+[[spirv::opcode(211)]] vec2         glfrag_dFdyFine(vec2 x)  noexcept;
+[[spirv::opcode(211)]] vec3         glfrag_dFdyFine(vec3 x)  noexcept;
+[[spirv::opcode(211)]] vec4         glfrag_dFdyFine(vec4 x)  noexcept;
+
+[[spirv::opcode(212)]] float        glfrag_fwidthFine(float x) noexcept;
+[[spirv::opcode(212)]] vec2         glfrag_fwidthFine(vec2 x)  noexcept;
+[[spirv::opcode(212)]] vec3         glfrag_fwidthFine(vec3 x)  noexcept;
+[[spirv::opcode(212)]] vec4         glfrag_fwidthFine(vec4 x)  noexcept;
 
 enum class glfrag_origin_t : unsigned {
   lower_left,   // OpenGL style
@@ -703,23 +858,31 @@ enum class glfrag_origin_t : unsigned {
 };
 
 // Compute shader variables.
-[[spirv::builtin]] uvec3        glcomp_NumWorkGroups;
-[[spirv::builtin]] uvec3        glcomp_WorkGroupSize;
-[[spirv::builtin]] uvec3        glcomp_WorkGroupID;
-[[spirv::builtin]] uvec3        glcomp_LocalInvocationID;
-[[spirv::builtin]] uvec3        glcomp_GlobalInvocationID;
-[[spirv::builtin]] unsigned     glcomp_LocalInvocationIndex;
+[[spirv::builtin(24)]] uvec3    glcomp_NumWorkGroups;
+[[spirv::builtin(25)]] uvec3    glcomp_WorkGroupSize;
+[[spirv::builtin(26)]] uvec3    glcomp_WorkGroupID;
+[[spirv::builtin(27)]] uvec3    glcomp_LocalInvocationID;
+[[spirv::builtin(28)]] uvec3    glcomp_GlobalInvocationID;
+[[spirv::builtin(29)]] unsigned glcomp_LocalInvocationIndex;
 
+[[spirv::builtin(24)]] uvec3    gridDim;    // glcomp_NumWorkGroups
+[[spirv::builtin(25)]] uvec3    blockDim;   // glcomp_WorkGroupSize
+[[spirv::builtin(26)]] uvec3    blockIdx;   // glcomp_WorkGroupID
+[[spirv::builtin(27)]] uvec3    threadIdx;  // glcomp_LocalInvocationID
+
+#define __shared__ __attribute__((shared))
+
+// NOTE: __synchreads is aliased to glcomp_barrier.
 [[spirv::builtin]] void         glcomp_barrier();
 
 ////////////////////////////////////////////////////////////////////////////////
 // GLSL_NV_mesh_shader
 
 [[spirv::out]]
-gl_PerVertex glmesh_Output[12];
+gl_PerVertex glmesh_Output[126];
 
 // Task shader variables.
-[[spirv::builtin]] uint glmesh_TaskCount;
+[[spirv::builtin(5274), spirv::out]] uint glmesh_TaskCount;
 
 // Mesh shader variables.
 enum class glmesh_output_t : unsigned {
@@ -728,11 +891,11 @@ enum class glmesh_output_t : unsigned {
   triangles,
 };
 
-[[spirv::builtin]] uint glmesh_ViewCount;
-[[spirv::builtin]] uint glmesh_ViewIndices[];
+[[spirv::builtin(5280)]] uint glmesh_ViewCount;
+[[spirv::builtin(5281)]] uint glmesh_ViewIndices[];
 
-[[spirv::builtin]] uint glmesh_PrimitiveCount;
-[[spirv::builtin]] uint glmesh_PrimitiveIndices[];
+[[spirv::builtin(5275), spirv::out]] uint glmesh_PrimitiveCount;
+[[spirv::builtin(5275), spirv::out]] uint glmesh_PrimitiveIndices[];
 
 [[spirv::opcode(5299)]] uint glmesh_writePackedPrimitiveIndices4x8(
   uint indexOffset, uint packedIndices);
@@ -742,7 +905,6 @@ enum class [[spirv::builtin]] sampler1D              : long long;
 enum class [[spirv::builtin]] sampler1DShadow        : long long;
 enum class [[spirv::builtin]] sampler1DArray         : long long;
 enum class [[spirv::builtin]] sampler1DArrayShadow   : long long;
- 
 enum class [[spirv::builtin]] sampler2D              : long long;
 enum class [[spirv::builtin]] sampler2DShadow        : long long;
 enum class [[spirv::builtin]] sampler2DArray         : long long;
@@ -751,55 +913,169 @@ enum class [[spirv::builtin]] sampler2DMS            : long long;
 enum class [[spirv::builtin]] sampler2DMSArray       : long long;
 enum class [[spirv::builtin]] sampler2DRect          : long long;
 enum class [[spirv::builtin]] sampler2DRectShadow    : long long;
- 
 enum class [[spirv::builtin]] sampler3D              : long long;
- 
 enum class [[spirv::builtin]] samplerCube            : long long;
 enum class [[spirv::builtin]] samplerCubeShadow      : long long;
 enum class [[spirv::builtin]] samplerCubeArray       : long long;
-enum class [[spirv::builtin]] samplerCubeArrayShadow : long long;
- 
+enum class [[spirv::builtin]] samplerCubeArrayShadow : long long; 
 enum class [[spirv::builtin]] samplerBuffer          : long long;
 
 // Signed integer opaque types.
 enum class [[spirv::builtin]] isampler1D             : long long;
 enum class [[spirv::builtin]] isampler1DArray        : long long;
-
 enum class [[spirv::builtin]] isampler2D             : long long;
 enum class [[spirv::builtin]] isampler2DArray        : long long;
 enum class [[spirv::builtin]] isampler2DMS           : long long;
 enum class [[spirv::builtin]] isampler2DMSArray      : long long;
 enum class [[spirv::builtin]] isampler2DRect         : long long;
-
 enum class [[spirv::builtin]] isampler3D             : long long;
 enum class [[spirv::builtin]] isamplerCube           : long long;
 enum class [[spirv::builtin]] isamplerCubeArray      : long long;
-
 enum class [[spirv::builtin]] isamplerBuffer         : long long;
 
 // Unsigned integer opaque types.
 enum class [[spirv::builtin]] usampler1D             : long long;
 enum class [[spirv::builtin]] usampler1DArray        : long long;
-
 enum class [[spirv::builtin]] usampler2D             : long long;
 enum class [[spirv::builtin]] usampler2DArray        : long long;
 enum class [[spirv::builtin]] usampler2DMS           : long long;
 enum class [[spirv::builtin]] usampler2DMSArray      : long long;
 enum class [[spirv::builtin]] usampler2DRect         : long long;
-
 enum class [[spirv::builtin]] usampler3D             : long long;
-enum class [[spirv::builtin]] utexture3D             : long long;
-enum class [[spirv::builtin]] uimage3D               : long long;
-
 enum class [[spirv::builtin]] usamplerCube           : long long;
 enum class [[spirv::builtin]] usamplerCubeArray      : long long;
-
 enum class [[spirv::builtin]] usamplerBuffer         : long long;
+
+////////////////////////////////////////////////////////////////////////////////
+
+enum class [[spirv::builtin]] sampler                : long long;
+enum class [[spirv::builtin]] samplerShadow          : long long;
+
+enum class [[spirv::builtin]] texture1D              : long long;
+enum class [[spirv::builtin]] texture1DArray         : long long;
+enum class [[spirv::builtin]] texture2D              : long long;
+enum class [[spirv::builtin]] texture2DArray         : long long;
+enum class [[spirv::builtin]] texture2DMS            : long long;
+enum class [[spirv::builtin]] texture2DMSArray       : long long;
+enum class [[spirv::builtin]] texture2DRect          : long long;
+enum class [[spirv::builtin]] texture3D              : long long;
+enum class [[spirv::builtin]] textureCube            : long long;
+enum class [[spirv::builtin]] textureCubeArray       : long long;
+enum class [[spirv::builtin]] textureBuffer          : long long;
+
+enum class [[spirv::builtin]] itexture1D             : long long;
+enum class [[spirv::builtin]] itexture1DArray        : long long;
+enum class [[spirv::builtin]] itexture2D             : long long;
+enum class [[spirv::builtin]] itexture2DArray        : long long;
+enum class [[spirv::builtin]] itexture2DMS           : long long;
+enum class [[spirv::builtin]] itexture2DMSArray      : long long;
+enum class [[spirv::builtin]] itexture2DRect         : long long;
+enum class [[spirv::builtin]] itexture3D             : long long;
+enum class [[spirv::builtin]] itextureCube           : long long;
+enum class [[spirv::builtin]] itextureCubeArray      : long long;
+enum class [[spirv::builtin]] itextureBuffer         : long long;
+
+enum class [[spirv::builtin]] utexture1D             : long long;
+enum class [[spirv::builtin]] utexture1DArray        : long long;
+enum class [[spirv::builtin]] utexture2D             : long long;
+enum class [[spirv::builtin]] utexture2DArray        : long long;
+enum class [[spirv::builtin]] utexture2DMS           : long long;
+enum class [[spirv::builtin]] utexture2DMSArray      : long long;
+enum class [[spirv::builtin]] utexture2DRect         : long long;
+enum class [[spirv::builtin]] utexture3D             : long long;
+enum class [[spirv::builtin]] utextureCube           : long long;
+enum class [[spirv::builtin]] utextureCubeArray      : long long;
+enum class [[spirv::builtin]] utextureBuffer         : long long;
+
+[[spirv::builtin]] sampler1D               combine(texture1D,              sampler); 
+[[spirv::builtin]] sampler1DArray          combine(texture1DArray,         sampler);
+[[spirv::builtin]] sampler2D               combine(texture2D,              sampler);
+[[spirv::builtin]] sampler2DArray          combine(texture2DArray,         sampler);
+[[spirv::builtin]] sampler2DMS             combine(texture2DMS,            sampler);
+[[spirv::builtin]] sampler2DMSArray        combine(texture2DMSArray,       sampler);
+[[spirv::builtin]] sampler2DRect           combine(texture2DRect,          sampler);
+[[spirv::builtin]] sampler3D               combine(texture3D,              sampler);
+[[spirv::builtin]] samplerCube             combine(textureCube,            sampler);
+[[spirv::builtin]] samplerCubeArray        combine(textureCubeArray,       sampler);
+[[spirv::builtin]] samplerBuffer           combine(textureBuffer,          sampler);
+
+[[spirv::builtin]] sampler1DShadow         combine(texture1D,        samplerShadow);
+[[spirv::builtin]] sampler1DArrayShadow    combine(texture1DArray,   samplerShadow);
+[[spirv::builtin]] sampler2DShadow         combine(texture2D,        samplerShadow);
+[[spirv::builtin]] sampler2DArrayShadow    combine(texture2DArray,   samplerShadow);
+[[spirv::builtin]] sampler2DRectShadow     combine(texture2DRect,    samplerShadow);
+[[spirv::builtin]] samplerCubeShadow       combine(textureCube,      samplerShadow);
+[[spirv::builtin]] samplerCubeArrayShadow  combine(textureCubeArray, samplerShadow);
+
+[[spirv::builtin]] isampler1D              combine(itexture1D,             sampler); 
+[[spirv::builtin]] isampler1DArray         combine(itexture1DArray,        sampler);
+[[spirv::builtin]] isampler2D              combine(itexture2D,             sampler);
+[[spirv::builtin]] isampler2DArray         combine(itexture2DArray,        sampler);
+[[spirv::builtin]] isampler2DMS            combine(itexture2DMS,           sampler);
+[[spirv::builtin]] isampler2DMSArray       combine(itexture2DMSArray,      sampler);
+[[spirv::builtin]] isampler2DRect          combine(itexture2DRect,         sampler);
+[[spirv::builtin]] isampler3D              combine(itexture3D,             sampler);
+[[spirv::builtin]] isamplerCube            combine(itextureCube,           sampler);
+[[spirv::builtin]] isamplerCubeArray       combine(itextureCubeArray,      sampler);
+[[spirv::builtin]] isamplerBuffer          combine(itextureBuffer,         sampler);
+
+[[spirv::builtin]] usampler1D              combine(utexture1D,             sampler); 
+[[spirv::builtin]] usampler1DArray         combine(utexture1DArray,        sampler);
+[[spirv::builtin]] usampler2D              combine(utexture2D,             sampler);
+[[spirv::builtin]] usampler2DArray         combine(utexture2DArray,        sampler);
+[[spirv::builtin]] usampler2DMS            combine(utexture2DMS,           sampler);
+[[spirv::builtin]] usampler2DMSArray       combine(utexture2DMSArray,      sampler);
+[[spirv::builtin]] usampler2DRect          combine(utexture2DRect,         sampler);
+[[spirv::builtin]] usampler3D              combine(utexture3D,             sampler);
+[[spirv::builtin]] usamplerCube            combine(utextureCube,           sampler);
+[[spirv::builtin]] usamplerCubeArray       combine(utextureCubeArray,      sampler);
+[[spirv::builtin]] usamplerBuffer          combine(utextureBuffer,         sampler);
 
 ////////////////////////////////////////////////////////////////////////////////
 // 8.9.1. Texture Query Functions
 
 // textureSize
+[[spirv::builtin]] int   textureSize(sampler1D sampler, int lod) noexcept;
+[[spirv::builtin]] ivec2 textureSize(sampler2D sampler, int lod) noexcept;
+[[spirv::builtin]] ivec3 textureSize(sampler3D sampler, int lod) noexcept;
+[[spirv::builtin]] ivec2 textureSize(samplerCube sampler, int lod) noexcept;
+[[spirv::builtin]] int   textureSize(isampler1D sampler, int lod) noexcept;
+[[spirv::builtin]] ivec2 textureSize(isampler2D sampler, int lod) noexcept;
+[[spirv::builtin]] ivec3 textureSize(isampler3D sampler, int lod) noexcept;
+[[spirv::builtin]] ivec2 textureSize(isamplerCube sampler, int lod) noexcept;
+[[spirv::builtin]] int   textureSize(usampler1D sampler, int lod) noexcept;
+[[spirv::builtin]] ivec2 textureSize(usampler2D sampler, int lod) noexcept;
+[[spirv::builtin]] ivec3 textureSize(usampler3D sampler, int lod) noexcept;
+[[spirv::builtin]] ivec2 textureSize(usamplerCube sampler, int lod) noexcept;
+[[spirv::builtin]] int   textureSize(sampler1DShadow sampler, int lod) noexcept;
+[[spirv::builtin]] ivec2 textureSize(sampler2DShadow sampler, int lod) noexcept;
+[[spirv::builtin]] ivec2 textureSize(samplerCubeShadow sampler, int lod) noexcept;
+[[spirv::builtin]] ivec3 textureSize(samplerCubeArray sampler, int lod) noexcept;
+[[spirv::builtin]] ivec3 textureSize(isamplerCubeArray sampler, int lod) noexcept;
+[[spirv::builtin]] ivec3 textureSize(usamplerCubeArray sampler, int lod) noexcept;
+[[spirv::builtin]] ivec3 textureSize(samplerCubeArrayShadow sampler, int lod) noexcept;
+[[spirv::builtin]] ivec2 textureSize(sampler2DRect sampler) noexcept;
+[[spirv::builtin]] ivec2 textureSize(isampler2DRect sampler) noexcept;
+[[spirv::builtin]] ivec2 textureSize(usampler2DRect sampler) noexcept;
+[[spirv::builtin]] ivec2 textureSize(sampler2DRectShadow sampler) noexcept;
+[[spirv::builtin]] ivec2 textureSize(sampler1DArray sampler, int lod) noexcept;
+[[spirv::builtin]] ivec2 textureSize(isampler1DArray sampler, int lod) noexcept;
+[[spirv::builtin]] ivec2 textureSize(usampler1DArray sampler, int lod) noexcept;
+[[spirv::builtin]] ivec2 textureSize(sampler1DArrayShadow sampler, int lod) noexcept;
+[[spirv::builtin]] ivec3 textureSize(sampler2DArray sampler, int lod) noexcept;
+[[spirv::builtin]] ivec3 textureSize(isampler2DArray sampler, int lod) noexcept;
+[[spirv::builtin]] ivec3 textureSize(usampler2DArray sampler, int lod) noexcept;
+[[spirv::builtin]] ivec3 textureSize(sampler2DArrayShadow sampler, int lod) noexcept;
+[[spirv::builtin]] int   textureSize(samplerBuffer sampler) noexcept;
+[[spirv::builtin]] int   textureSize(isamplerBuffer sampler) noexcept;
+[[spirv::builtin]] int   textureSize(usamplerBuffer sampler) noexcept;
+[[spirv::builtin]] ivec2 textureSize(sampler2DMS sampler) noexcept;
+[[spirv::builtin]] ivec2 textureSize(isampler2DMS sampler) noexcept;
+[[spirv::builtin]] ivec2 textureSize(usampler2DMS sampler) noexcept;
+[[spirv::builtin]] ivec3 textureSize(sampler2DMSArray sampler) noexcept;
+[[spirv::builtin]] ivec3 textureSize(isampler2DMSArray sampler) noexcept;
+[[spirv::builtin]] ivec3 textureSize(usampler2DMSArray sampler) noexcept;
+
 [[spirv::builtin]] int   textureSize(sampler1D sampler, int lod) noexcept;
 [[spirv::builtin]] ivec2 textureSize(sampler2D sampler, int lod) noexcept;
 [[spirv::builtin]] ivec3 textureSize(sampler3D sampler, int lod) noexcept;
@@ -1895,43 +2171,37 @@ enum class [[spirv::builtin]] usubpassInputMS        : long long;
 // declared as follows:
 
 // Work dimensions
-[[spirv::builtin]] uvec3  glray_LaunchID;
-[[spirv::builtin]] uvec3  glray_LaunchSize;
+[[spirv::builtin(5319)]] uvec3  glray_LaunchID;
+[[spirv::builtin(5320)]] uvec3  glray_LaunchSize;
 
 // Geometry instance ids
-[[spirv::builtin]] int    glray_PrimitiveID;
-[[spirv::builtin]] int    glray_InstanceID;
-[[spirv::builtin]] int    glray_InstanceCustomIndex;
+[[spirv::builtin(7)]]    int    glray_PrimitiveID;
+[[spirv::builtin(6)]]    int    glray_InstanceID;
+[[spirv::builtin(5327)]] int    glray_InstanceCustomIndex;
 
 // World space parameters
-[[spirv::builtin]] vec3   glray_WorldRayOrigin;
-[[spirv::builtin]] vec3   glray_WorldRayDirection;
-[[spirv::builtin]] vec3   glray_ObjectRayOrigin;
-[[spirv::builtin]] vec3   glray_ObjectRayDirection;
+[[spirv::builtin(5321)]] vec3   glray_WorldRayOrigin;
+[[spirv::builtin(5322)]] vec3   glray_WorldRayDirection;
+[[spirv::builtin(5323)]] vec3   glray_ObjectRayOrigin;
+[[spirv::builtin(5324)]] vec3   glray_ObjectRayDirection;
 
 // Ray parameters
-[[spirv::builtin]] float  glray_Tmin;
-[[spirv::builtin]] float  glray_Tmax;
-[[spirv::builtin]] uint   glray_IncomingRayFlags;
+[[spirv::builtin(5325)]] float  glray_Tmin;
+[[spirv::builtin(5326)]] float  glray_Tmax;
+[[spirv::builtin(5351)]] uint   glray_IncomingRayFlags;
 
 // Ray hit info
-[[spirv::builtin]] float  glray_HitT;
-[[spirv::builtin]] uint   glray_HitKind;
+[[spirv::builtin(5332)]] float  glray_HitT;
+[[spirv::builtin(5333)]] uint   glray_HitKind;
 
 // Transform matrices
-[[spirv::builtin]] mat4x3 glray_ObjectToWorld;
-[[spirv::builtin]] mat4x3 glray_WorldToObject;
+[[spirv::builtin(5330)]] mat4x3 glray_ObjectToWorld;
+[[spirv::builtin(5331)]] mat4x3 glray_WorldToObject;
 
-enum class [[spirv::builtin]] accelerationStructure : long long;
+// todo: rename as glray_accelerationStructure?
+enum class [[spirv::opcode(5341)]] accelerationStructure : long long;
 
-struct RayDesc {
-  vec3  Origin;
-  float Tmin;
-  vec3  Direction;
-  float Tmax;
-};
-
-[[spirv::builtin]] void glray_Trace(
+[[spirv::opcode(5337)]] void glray_Trace(
   accelerationStructure topLevel,
   uint rayFlags,
   uint cullMask,
@@ -1944,80 +2214,792 @@ struct RayDesc {
   float Tmax,
   int payload);
 
-[[spirv::builtin]] void glray_Trace(
+// Payload is a pointer to the ray payload structure to use for this trace.
+// Payload must be the result of an OpVariable with a storage class of 
+// RayPayloadKHR or IncomingRayPayloadKHR.
+// [[spirv::opcode(4445)]] void glray_TraceKHR(
+//   accelerationStructure topLevel,
+//   uint rayFlags,
+//   uint cullMask,
+//   uint sbtRecordOffset,
+//   uint sbtRecordStride,
+//   uint missIndex,
+//   vec3 origin,
+//   float Tmin,
+//   vec3 direction,
+//   float Tmax,
+//   void* payload); 
+
+const uint gl_RayFlagsNone = 0;
+const uint gl_RayFlagsOpaque = 1;
+const uint gl_RayFlagsNoOpaque = 2;
+const uint gl_RayFlagsTerminateOnFirstHit = 4;
+const uint gl_RayFlagsSkipClosestHitShader = 8;
+const uint gl_RayFlagsCullBackFacingTriangles = 16;
+const uint gl_RayFlagsCullFrontFacingTriangles = 32;
+const uint gl_RayFlagsCullOpaque = 64;
+const uint gl_RayFlagsCullNoOpaque = 128;
+const uint gl_RayFlagsSkipTriangles = 256;
+const uint gl_RayFlagsSkipAABBs = 512;
+
+[[spirv::opcode(5334)]] bool gl_reportIntersection(float hitT, uint hitKind);
+[[spirv::opcode(5335)]] void gl_ignoreIntersection();
+[[spirv::opcode(5336)]] void gl_terminateRay();
+[[spirv::opcode(5344)]] void gl_executeCallable(uint sbtRecordIndex, int callable);
+
+////////////////////////////////////////////////////////////////////////////////
+// https://github.com/KhronosGroup/GLSL/blob/master/extensions/ext/GLSL_EXT_ray_query.txt
+
+enum class [[spirv::opcode(4472)]] gl_rayQuery : long long;
+
+const uint gl_RayQueryCommittedIntersectionNone = 0;
+const uint gl_RayQueryCommittedIntersectionTriangle = 1;
+const uint gl_RayQueryCommittedIntersectionGenerated = 2;
+
+const uint gl_RayQueryCandidateIntersectionTriangle = 0;
+const uint gl_RayQueryCandidateIntersectionAABB = 1;
+
+[[spirv::opcode(4473)]] void gl_rayQueryInitialize(
+  gl_rayQuery& q,
   accelerationStructure topLevel,
   uint rayFlags,
   uint cullMask,
-  uint sbtRecordOffset,
-  uint sbtRecordStride,
-  uint missIndex,
-  RayDesc rayDesc,
-  int payload);
+  vec3 origin,
+  float tMin,
+  vec3 direction,
+  float tMax);
 
-const uint glray_FlagsNone = 0;
-const uint glray_FlagsOpaque = 1;
-const uint glray_FlagsNoOpaque = 2;
-const uint glray_FlagsTerminateOnFirstHit = 4;
-const uint glray_FlagsSkipClosestHitShader = 8;
-const uint glray_FlagsCullBackFacingTriangles = 16;
-const uint glray_FlagsCullFrontFacingTriangles = 32;
-const uint glray_FlagsCullOpaque = 64;
-const uint glray_FlagsCullNoOpaque = 128;
-const uint glray_FlagsSkipTriangles = 256;
-const uint glray_FlagsSkipAABBs = 512;
-
-
-[[spirv::builtin]] bool glray_reportIntersection(float hitT, uint hitKind);
-
-// Terminators.
-[[spirv::builtin]] void glray_ignoreIntersection();
-[[spirv::builtin]] void glray_terminateRay();
-
-[[spirv::builtin]] void glray_executeCallable(uint sbtRecordIndex, int callable);
-
+[[spirv::opcode(4477)]] bool   gl_rayQueryProceed(gl_rayQuery& q);
+[[spirv::opcode(4474)]] void   gl_rayQueryTerminate(gl_rayQuery& q);
+[[spirv::opcode(4475)]] void   gl_rayQueryGenerateIntersection(gl_rayQuery& q, float tHit);
+[[spirv::opcode(4476)]] void   gl_rayQueryConfirmIntersection(gl_rayQuery& q);
+[[spirv::opcode(4479)]] uint   gl_rayQueryGetIntersectionType(gl_rayQuery& q, int committed);
+[[spirv::opcode(6016)]] float  gl_rayQueryGetRayTMin(gl_rayQuery& q);
+[[spirv::opcode(6017)]] uint   gl_rayQueryGetRayFlags(gl_rayQuery& q);
+[[spirv::opcode(6030)]] vec3   gl_rayQueryGetWorldRayOrigin(gl_rayQuery& q);
+[[spirv::opcode(6029)]] vec3   gl_rayQueryGetWorldRayDirection(gl_rayQuery& q);
+[[spirv::opcode(6018)]] float  gl_rayQueryGetIntersectionT(gl_rayQuery& q, int committed);
+[[spirv::opcode(6019)]] int    gl_rayQueryGetIntersectionInstanceCustomIndex(gl_rayQuery& q, int committed);
+[[spirv::opcode(6020)]] int    gl_rayQueryGetIntersectionInstanceId(gl_rayQuery& q, int committed);
+[[spirv::opcode(6021)]] uint   gl_rayQueryGetIntersectionInstanceShaderBindingTableRecordOffset(gl_rayQuery&q, bool committed);
+[[spirv::opcode(6022)]] int    gl_rayQueryGetIntersectionGeometryIndex(gl_rayQuery& q, int committed);
+[[spirv::opcode(6023)]] int    gl_rayQueryGetIntersectionPrimitiveIndex(gl_rayQuery& q, int committed);
+[[spirv::opcode(6024)]] vec2   gl_rayQueryGetIntersectionBarycentrics(gl_rayQuery& q, int committed);
+[[spirv::opcode(6025)]] bool   gl_rayQueryGetIntersectionFrontFace(gl_rayQuery& q, int committed);
+[[spirv::opcode(6026)]] bool   gl_rayQueryGetIntersectionCandidateAABBOpaque(gl_rayQuery& q);
+[[spirv::opcode(6027)]] vec3   gl_rayQueryGetIntersectionObjectRayDirection(gl_rayQuery& q, int committed);
+[[spirv::opcode(6028)]] vec3   gl_rayQueryGetIntersectionObjectRayOrigin(gl_rayQuery& q, int committed);
+[[spirv::opcode(6031)]] mat4x3 gl_rayQueryGetIntersectionObjectToWorld(gl_rayQuery& q, int committed);
+[[spirv::opcode(6032)]] mat4x3 gl_rayQueryGetIntersectionWorldToObject(gl_rayQuery& q, int committed);
 
 ////////////////////////////////////////////////////////////////////////////////
-// Extension instructions
-
 // https://github.com/KhronosGroup/GLSL/blob/master/extensions/khr/GL_KHR_shader_subgroup.txt
 // GL_KHR_shader_subgroup_ballot
 
-[[spirv::builtin]] uint gl_NumSubgroups;
-[[spirv::builtin]] uint gl_SubgroupID;
+[[spirv::builtin(38)]] uint gl_NumSubgroups;
+[[spirv::builtin(40)]] uint gl_SubgroupID;
 
-[[spirv::builtin]] uint  gl_SubgroupSize;
-[[spirv::builtin]] uint  gl_SubgroupInvocationID;
-[[spirv::builtin]] uvec4 gl_SubgroupEqMask;
-[[spirv::builtin]] uvec4 gl_SubgroupGeMask;
-[[spirv::builtin]] uvec4 gl_SubgroupGtMask;
-[[spirv::builtin]] uvec4 gl_SubgroupLeMask;
-[[spirv::builtin]] uvec4 gl_SubgroupLtMask;
+[[spirv::builtin(36)  ]] uint  gl_SubgroupSize;
+[[spirv::builtin(41)  ]] uint  gl_SubgroupInvocationID;
+[[spirv::builtin(4416)]] uvec4 gl_SubgroupEqMask;
+[[spirv::builtin(4417)]] uvec4 gl_SubgroupGeMask;
+[[spirv::builtin(4418)]] uvec4 gl_SubgroupGtMask;
+[[spirv::builtin(4419)]] uvec4 gl_SubgroupLeMask;
+[[spirv::builtin(4420)]] uvec4 gl_SubgroupLtMask;
 
-[[spirv::builtin]] uvec4 gl_subgroupBallot(bool value);
+// GL_KHR_shader_subgroup_basic
+[[spirv::builtin]] void gl_subgroupBarrier() noexcept;
+[[spirv::builtin]] void gl_subgroupMemoryBarrier() noexcept;
+[[spirv::builtin]] void gl_subgroupMemoryBarrierBuffer() noexcept;
+[[spirv::builtin]] void gl_subgroupMemoryBarrierShared() noexcept;
+[[spirv::builtin]] void gl_subgroupMemoryBarrierImage() noexcept;
+[[spirv::builtin]] bool gl_subgroupElect() noexcept;
 
-[[spirv::builtin]] bool   gl_subgroupShuffle(bool   value, uint id);
-[[spirv::builtin]] float  gl_subgroupShuffle(float  value, uint id);
-[[spirv::builtin]] double gl_subgroupShuffle(double value, uint id);
-[[spirv::builtin]] int    gl_subgroupShuffle(int    value, uint id);
-[[spirv::builtin]] uint   gl_subgroupShuffle(uint   value, uint id);
+// GL_KHR_shader_subgroup_vote
+[[spirv::builtin]] bool gl_subgroupAll(bool value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAny(bool value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(float  value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(vec2   value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(vec3   value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(vec4   value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(int    value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(ivec2  value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(ivec3  value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(ivec4  value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(uint   value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(uvec2  value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(uvec3  value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(uvec4  value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(bool   value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(bvec2  value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(bvec3  value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(bvec4  value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(double value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(dvec2  value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(dvec3  value) noexcept;
+[[spirv::builtin]] bool gl_subgroupAllEqual(dvec4  value) noexcept;
 
-[[spirv::builtin]] bool   gl_subgroupShuffleXor(bool   value, uint mask);
-[[spirv::builtin]] float  gl_subgroupShuffleXor(float  value, uint mask);
-[[spirv::builtin]] double gl_subgroupShuffleXor(double value, uint mask);
-[[spirv::builtin]] int    gl_subgroupShuffleXor(int    value, uint mask);
-[[spirv::builtin]] uint   gl_subgroupShuffleXor(uint   value, uint mask);
+// GL_KHR_shader_subgroup_ballot
+[[spirv::builtin]] float  gl_subgroupBroadcast(float  value, uint id) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupBroadcast(vec2   value, uint id) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupBroadcast(vec3   value, uint id) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupBroadcast(vec4   value, uint id) noexcept;
+[[spirv::builtin]] int    gl_subgroupBroadcast(int    value, uint id) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupBroadcast(ivec2  value, uint id) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupBroadcast(ivec3  value, uint id) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupBroadcast(ivec4  value, uint id) noexcept;
+[[spirv::builtin]] uint   gl_subgroupBroadcast(uint   value, uint id) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupBroadcast(uvec2  value, uint id) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupBroadcast(uvec3  value, uint id) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupBroadcast(uvec4  value, uint id) noexcept;
+[[spirv::builtin]] bool   gl_subgroupBroadcast(bool   value, uint id) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupBroadcast(bvec2  value, uint id) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupBroadcast(bvec3  value, uint id) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupBroadcast(bvec4  value, uint id) noexcept;
+[[spirv::builtin]] double gl_subgroupBroadcast(double value, uint id) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupBroadcast(dvec2  value, uint id) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupBroadcast(dvec3  value, uint id) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupBroadcast(dvec4  value, uint id) noexcept;
 
-[[spirv::builtin]] bool   gl_subgroupShuffleUp(bool   value, uint delta);
-[[spirv::builtin]] float  gl_subgroupShuffleUp(float  value, uint delta);
-[[spirv::builtin]] double gl_subgroupShuffleUp(double value, uint delta);
-[[spirv::builtin]] int    gl_subgroupShuffleUp(int    value, uint delta);
-[[spirv::builtin]] uint   gl_subgroupShuffleUp(uint   value, uint delta);
+[[spirv::builtin]] float  gl_subgroupBroadcastFirst(float  value) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupBroadcastFirst(vec2   value) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupBroadcastFirst(vec3   value) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupBroadcastFirst(vec4   value) noexcept;
+[[spirv::builtin]] int    gl_subgroupBroadcastFirst(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupBroadcastFirst(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupBroadcastFirst(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupBroadcastFirst(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupBroadcastFirst(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupBroadcastFirst(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupBroadcastFirst(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupBroadcastFirst(uvec4  value) noexcept;
+[[spirv::builtin]] bool   gl_subgroupBroadcastFirst(bool   value) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupBroadcastFirst(bvec2  value) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupBroadcastFirst(bvec3  value) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupBroadcastFirst(bvec4  value) noexcept;
+[[spirv::builtin]] double gl_subgroupBroadcastFirst(double value) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupBroadcastFirst(dvec2  value) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupBroadcastFirst(dvec3  value) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupBroadcastFirst(dvec4  value) noexcept;
 
-[[spirv::builtin]] bool   gl_subgroupShuffleDown(bool   value, uint delta);
-[[spirv::builtin]] float  gl_subgroupShuffleDown(float  value, uint delta);
-[[spirv::builtin]] double gl_subgroupShuffleDown(double value, uint delta);
-[[spirv::builtin]] int    gl_subgroupShuffleDown(int    value, uint delta);
-[[spirv::builtin]] uint   gl_subgroupShuffleDown(uint   value, uint delta);
+[[spirv::builtin]] uvec4 gl_subgroupBallot(bool value) noexcept;
+[[spirv::builtin]] bool  gl_subgroupInverseBallot(uvec4 value) noexcept;
+[[spirv::builtin]] bool  gl_subgroupBallotBitExtract(uvec4 value, uint index) noexcept;
+[[spirv::builtin]] uint  gl_subgroupBallotBitCount(uvec4 value) noexcept;
+[[spirv::builtin]] uint  gl_subgroupBallotInclusiveBitCount(uvec4 value) noexcept;
+[[spirv::builtin]] uint  gl_subgroupBallotExclusiveBitCount(uvec4 value) noexcept;
+[[spirv::builtin]] uint  gl_subgroupBallotFindLSB(uvec4 value) noexcept;
+[[spirv::builtin]] uint  gl_subgroupBallotFindMSB(uvec4 value) noexcept;
+
+// GL_KHR_shader_subgroup_shuffle
+
+[[spirv::builtin]] float  gl_subgroupShuffle(float  value, uint id) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupShuffle(vec2   value, uint id) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupShuffle(vec3   value, uint id) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupShuffle(vec4   value, uint id) noexcept;
+[[spirv::builtin]] int    gl_subgroupShuffle(int    value, uint id) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupShuffle(ivec2  value, uint id) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupShuffle(ivec3  value, uint id) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupShuffle(ivec4  value, uint id) noexcept;
+[[spirv::builtin]] uint   gl_subgroupShuffle(uint   value, uint id) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupShuffle(uvec2  value, uint id) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupShuffle(uvec3  value, uint id) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupShuffle(uvec4  value, uint id) noexcept;
+[[spirv::builtin]] bool   gl_subgroupShuffle(bool   value, uint id) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupShuffle(bvec2  value, uint id) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupShuffle(bvec3  value, uint id) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupShuffle(bvec4  value, uint id) noexcept;
+[[spirv::builtin]] double gl_subgroupShuffle(double value, uint id) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupShuffle(dvec2  value, uint id) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupShuffle(dvec3  value, uint id) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupShuffle(dvec4  value, uint id) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupShuffleXor(float  value, uint mask) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupShuffleXor(vec2   value, uint mask) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupShuffleXor(vec3   value, uint mask) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupShuffleXor(vec4   value, uint mask) noexcept;
+[[spirv::builtin]] int    gl_subgroupShuffleXor(int    value, uint mask) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupShuffleXor(ivec2  value, uint mask) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupShuffleXor(ivec3  value, uint mask) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupShuffleXor(ivec4  value, uint mask) noexcept;
+[[spirv::builtin]] uint   gl_subgroupShuffleXor(uint   value, uint mask) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupShuffleXor(uvec2  value, uint mask) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupShuffleXor(uvec3  value, uint mask) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupShuffleXor(uvec4  value, uint mask) noexcept;
+[[spirv::builtin]] bool   gl_subgroupShuffleXor(bool   value, uint mask) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupShuffleXor(bvec2  value, uint mask) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupShuffleXor(bvec3  value, uint mask) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupShuffleXor(bvec4  value, uint mask) noexcept;
+[[spirv::builtin]] double gl_subgroupShuffleXor(double value, uint mask) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupShuffleXor(dvec2  value, uint mask) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupShuffleXor(dvec3  value, uint mask) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupShuffleXor(dvec4  value, uint mask) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupShuffleUp(float  value, uint delta) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupShuffleUp(vec2   value, uint delta) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupShuffleUp(vec3   value, uint delta) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupShuffleUp(vec4   value, uint delta) noexcept;
+[[spirv::builtin]] int    gl_subgroupShuffleUp(int    value, uint delta) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupShuffleUp(ivec2  value, uint delta) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupShuffleUp(ivec3  value, uint delta) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupShuffleUp(ivec4  value, uint delta) noexcept;
+[[spirv::builtin]] uint   gl_subgroupShuffleUp(uint   value, uint delta) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupShuffleUp(uvec2  value, uint delta) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupShuffleUp(uvec3  value, uint delta) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupShuffleUp(uvec4  value, uint delta) noexcept;
+[[spirv::builtin]] bool   gl_subgroupShuffleUp(bool   value, uint delta) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupShuffleUp(bvec2  value, uint delta) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupShuffleUp(bvec3  value, uint delta) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupShuffleUp(bvec4  value, uint delta) noexcept;
+[[spirv::builtin]] double gl_subgroupShuffleUp(double value, uint delta) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupShuffleUp(dvec2  value, uint delta) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupShuffleUp(dvec3  value, uint delta) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupShuffleUp(dvec4  value, uint delta) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupShuffleDown(float  value, uint delta) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupShuffleDown(vec2   value, uint delta) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupShuffleDown(vec3   value, uint delta) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupShuffleDown(vec4   value, uint delta) noexcept;
+[[spirv::builtin]] int    gl_subgroupShuffleDown(int    value, uint delta) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupShuffleDown(ivec2  value, uint delta) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupShuffleDown(ivec3  value, uint delta) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupShuffleDown(ivec4  value, uint delta) noexcept;
+[[spirv::builtin]] uint   gl_subgroupShuffleDown(uint   value, uint delta) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupShuffleDown(uvec2  value, uint delta) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupShuffleDown(uvec3  value, uint delta) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupShuffleDown(uvec4  value, uint delta) noexcept;
+[[spirv::builtin]] bool   gl_subgroupShuffleDown(bool   value, uint delta) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupShuffleDown(bvec2  value, uint delta) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupShuffleDown(bvec3  value, uint delta) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupShuffleDown(bvec4  value, uint delta) noexcept;
+[[spirv::builtin]] double gl_subgroupShuffleDown(double value, uint delta) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupShuffleDown(dvec2  value, uint delta) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupShuffleDown(dvec3  value, uint delta) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupShuffleDown(dvec4  value, uint delta) noexcept;
+
+// GL_KHR_shader_subgroup_arithmetic
+
+[[spirv::builtin]] float  gl_subgroupAdd(float  value) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupAdd(vec2   value) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupAdd(vec3   value) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupAdd(vec4   value) noexcept;
+[[spirv::builtin]] int    gl_subgroupAdd(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupAdd(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupAdd(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupAdd(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupAdd(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupAdd(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupAdd(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupAdd(uvec4  value) noexcept;
+[[spirv::builtin]] double gl_subgroupAdd(double value) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupAdd(dvec2  value) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupAdd(dvec3  value) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupAdd(dvec4  value) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupMul(float  value) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupMul(vec2   value) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupMul(vec3   value) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupMul(vec4   value) noexcept;
+[[spirv::builtin]] int    gl_subgroupMul(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupMul(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupMul(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupMul(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupMul(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupMul(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupMul(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupMul(uvec4  value) noexcept;
+[[spirv::builtin]] double gl_subgroupMul(double value) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupMul(dvec2  value) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupMul(dvec3  value) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupMul(dvec4  value) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupMin(float  value) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupMin(vec2   value) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupMin(vec3   value) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupMin(vec4   value) noexcept;
+[[spirv::builtin]] int    gl_subgroupMin(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupMin(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupMin(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupMin(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupMin(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupMin(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupMin(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupMin(uvec4  value) noexcept;
+[[spirv::builtin]] double gl_subgroupMin(double value) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupMin(dvec2  value) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupMin(dvec3  value) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupMin(dvec4  value) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupMax(float  value) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupMax(vec2   value) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupMax(vec3   value) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupMax(vec4   value) noexcept;
+[[spirv::builtin]] int    gl_subgroupMax(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupMax(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupMax(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupMax(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupMax(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupMax(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupMax(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupMax(uvec4  value) noexcept;
+[[spirv::builtin]] double gl_subgroupMax(double value) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupMax(dvec2  value) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupMax(dvec3  value) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupMax(dvec4  value) noexcept;
+
+[[spirv::builtin]] int    gl_subgroupAnd(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupAnd(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupAnd(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupAnd(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupAnd(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupAnd(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupAnd(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupAnd(uvec4  value) noexcept;
+[[spirv::builtin]] bool   gl_subgroupAnd(bool   value) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupAnd(bvec2  value) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupAnd(bvec3  value) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupAnd(bvec4  value) noexcept;
+
+[[spirv::builtin]] int    gl_subgroupOr(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupOr(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupOr(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupOr(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupOr(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupOr(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupOr(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupOr(uvec4  value) noexcept;
+[[spirv::builtin]] bool   gl_subgroupOr(bool   value) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupOr(bvec2  value) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupOr(bvec3  value) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupOr(bvec4  value) noexcept;
+
+[[spirv::builtin]] int    gl_subgroupXor(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupXor(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupXor(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupXor(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupXor(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupXor(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupXor(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupXor(uvec4  value) noexcept;
+[[spirv::builtin]] bool   gl_subgroupXor(bool   value) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupXor(bvec2  value) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupXor(bvec3  value) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupXor(bvec4  value) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupInclusiveAdd(float  value) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupInclusiveAdd(vec2   value) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupInclusiveAdd(vec3   value) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupInclusiveAdd(vec4   value) noexcept;
+[[spirv::builtin]] int    gl_subgroupInclusiveAdd(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupInclusiveAdd(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupInclusiveAdd(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupInclusiveAdd(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupInclusiveAdd(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupInclusiveAdd(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupInclusiveAdd(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupInclusiveAdd(uvec4  value) noexcept;
+[[spirv::builtin]] double gl_subgroupInclusiveAdd(double value) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupInclusiveAdd(dvec2  value) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupInclusiveAdd(dvec3  value) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupInclusiveAdd(dvec4  value) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupInclusiveMul(float  value) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupInclusiveMul(vec2   value) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupInclusiveMul(vec3   value) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupInclusiveMul(vec4   value) noexcept;
+[[spirv::builtin]] int    gl_subgroupInclusiveMul(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupInclusiveMul(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupInclusiveMul(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupInclusiveMul(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupInclusiveMul(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupInclusiveMul(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupInclusiveMul(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupInclusiveMul(uvec4  value) noexcept;
+[[spirv::builtin]] double gl_subgroupInclusiveMul(double value) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupInclusiveMul(dvec2  value) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupInclusiveMul(dvec3  value) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupInclusiveMul(dvec4  value) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupInclusiveMin(float  value) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupInclusiveMin(vec2   value) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupInclusiveMin(vec3   value) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupInclusiveMin(vec4   value) noexcept;
+[[spirv::builtin]] int    gl_subgroupInclusiveMin(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupInclusiveMin(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupInclusiveMin(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupInclusiveMin(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupInclusiveMin(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupInclusiveMin(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupInclusiveMin(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupInclusiveMin(uvec4  value) noexcept;
+[[spirv::builtin]] double gl_subgroupInclusiveMin(double value) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupInclusiveMin(dvec2  value) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupInclusiveMin(dvec3  value) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupInclusiveMin(dvec4  value) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupInclusiveMax(float  value) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupInclusiveMax(vec2   value) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupInclusiveMax(vec3   value) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupInclusiveMax(vec4   value) noexcept;
+[[spirv::builtin]] int    gl_subgroupInclusiveMax(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupInclusiveMax(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupInclusiveMax(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupInclusiveMax(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupInclusiveMax(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupInclusiveMax(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupInclusiveMax(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupInclusiveMax(uvec4  value) noexcept;
+[[spirv::builtin]] double gl_subgroupInclusiveMax(double value) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupInclusiveMax(dvec2  value) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupInclusiveMax(dvec3  value) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupInclusiveMax(dvec4  value) noexcept;
+
+[[spirv::builtin]] int    gl_subgroupInclusiveAnd(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupInclusiveAnd(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupInclusiveAnd(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupInclusiveAnd(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupInclusiveAnd(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupInclusiveAnd(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupInclusiveAnd(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupInclusiveAnd(uvec4  value) noexcept;
+[[spirv::builtin]] bool   gl_subgroupInclusiveAnd(bool   value) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupInclusiveAnd(bvec2  value) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupInclusiveAnd(bvec3  value) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupInclusiveAnd(bvec4  value) noexcept;
+
+[[spirv::builtin]] int    gl_subgroupInclusiveOr(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupInclusiveOr(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupInclusiveOr(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupInclusiveOr(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupInclusiveOr(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupInclusiveOr(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupInclusiveOr(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupInclusiveOr(uvec4  value) noexcept;
+[[spirv::builtin]] bool   gl_subgroupInclusiveOr(bool   value) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupInclusiveOr(bvec2  value) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupInclusiveOr(bvec3  value) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupInclusiveOr(bvec4  value) noexcept;
+
+[[spirv::builtin]] int    gl_subgroupInclusiveXor(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupInclusiveXor(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupInclusiveXor(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupInclusiveXor(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupInclusiveXor(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupInclusiveXor(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupInclusiveXor(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupInclusiveXor(uvec4  value) noexcept;
+[[spirv::builtin]] bool   gl_subgroupInclusiveXor(bool   value) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupInclusiveXor(bvec2  value) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupInclusiveXor(bvec3  value) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupInclusiveXor(bvec4  value) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupExclusiveAdd(float  value) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupExclusiveAdd(vec2   value) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupExclusiveAdd(vec3   value) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupExclusiveAdd(vec4   value) noexcept;
+[[spirv::builtin]] int    gl_subgroupExclusiveAdd(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupExclusiveAdd(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupExclusiveAdd(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupExclusiveAdd(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupExclusiveAdd(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupExclusiveAdd(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupExclusiveAdd(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupExclusiveAdd(uvec4  value) noexcept;
+[[spirv::builtin]] double gl_subgroupExclusiveAdd(double value) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupExclusiveAdd(dvec2  value) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupExclusiveAdd(dvec3  value) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupExclusiveAdd(dvec4  value) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupExclusiveMul(float  value) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupExclusiveMul(vec2   value) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupExclusiveMul(vec3   value) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupExclusiveMul(vec4   value) noexcept;
+[[spirv::builtin]] int    gl_subgroupExclusiveMul(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupExclusiveMul(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupExclusiveMul(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupExclusiveMul(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupExclusiveMul(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupExclusiveMul(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupExclusiveMul(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupExclusiveMul(uvec4  value) noexcept;
+[[spirv::builtin]] double gl_subgroupExclusiveMul(double value) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupExclusiveMul(dvec2  value) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupExclusiveMul(dvec3  value) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupExclusiveMul(dvec4  value) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupExclusiveMin(float  value) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupExclusiveMin(vec2   value) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupExclusiveMin(vec3   value) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupExclusiveMin(vec4   value) noexcept;
+[[spirv::builtin]] int    gl_subgroupExclusiveMin(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupExclusiveMin(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupExclusiveMin(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupExclusiveMin(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupExclusiveMin(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupExclusiveMin(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupExclusiveMin(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupExclusiveMin(uvec4  value) noexcept;
+[[spirv::builtin]] double gl_subgroupExclusiveMin(double value) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupExclusiveMin(dvec2  value) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupExclusiveMin(dvec3  value) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupExclusiveMin(dvec4  value) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupExclusiveMax(float  value) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupExclusiveMax(vec2   value) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupExclusiveMax(vec3   value) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupExclusiveMax(vec4   value) noexcept;
+[[spirv::builtin]] int    gl_subgroupExclusiveMax(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupExclusiveMax(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupExclusiveMax(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupExclusiveMax(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupExclusiveMax(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupExclusiveMax(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupExclusiveMax(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupExclusiveMax(uvec4  value) noexcept;
+[[spirv::builtin]] double gl_subgroupExclusiveMax(double value) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupExclusiveMax(dvec2  value) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupExclusiveMax(dvec3  value) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupExclusiveMax(dvec4  value) noexcept;
+
+[[spirv::builtin]] int    gl_subgroupExclusiveAnd(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupExclusiveAnd(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupExclusiveAnd(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupExclusiveAnd(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupExclusiveAnd(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupExclusiveAnd(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupExclusiveAnd(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupExclusiveAnd(uvec4  value) noexcept;
+[[spirv::builtin]] bool   gl_subgroupExclusiveAnd(bool   value) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupExclusiveAnd(bvec2  value) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupExclusiveAnd(bvec3  value) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupExclusiveAnd(bvec4  value) noexcept;
+
+[[spirv::builtin]] int    gl_subgroupExclusiveOr(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupExclusiveOr(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupExclusiveOr(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupExclusiveOr(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupExclusiveOr(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupExclusiveOr(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupExclusiveOr(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupExclusiveOr(uvec4  value) noexcept;
+[[spirv::builtin]] bool   gl_subgroupExclusiveOr(bool   value) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupExclusiveOr(bvec2  value) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupExclusiveOr(bvec3  value) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupExclusiveOr(bvec4  value) noexcept;
+
+[[spirv::builtin]] int    gl_subgroupExclusiveXor(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupExclusiveXor(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupExclusiveXor(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupExclusiveXor(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupExclusiveXor(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupExclusiveXor(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupExclusiveXor(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupExclusiveXor(uvec4  value) noexcept;
+[[spirv::builtin]] bool   gl_subgroupExclusiveXor(bool   value) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupExclusiveXor(bvec2  value) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupExclusiveXor(bvec3  value) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupExclusiveXor(bvec4  value) noexcept;
+
+// GL_KHR_shader_subgroup_clustered
+
+[[spirv::builtin]] float  gl_subgroupClusteredAdd(float  value, uint clusterSize) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupClusteredAdd(vec2   value, uint clusterSize) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupClusteredAdd(vec3   value, uint clusterSize) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupClusteredAdd(vec4   value, uint clusterSize) noexcept;
+[[spirv::builtin]] int    gl_subgroupClusteredAdd(int    value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupClusteredAdd(ivec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupClusteredAdd(ivec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupClusteredAdd(ivec4  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uint   gl_subgroupClusteredAdd(uint   value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupClusteredAdd(uvec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupClusteredAdd(uvec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupClusteredAdd(uvec4  value, uint clusterSize) noexcept;
+[[spirv::builtin]] double gl_subgroupClusteredAdd(double value, uint clusterSize) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupClusteredAdd(dvec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupClusteredAdd(dvec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupClusteredAdd(dvec4  value, uint clusterSize) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupClusteredMul(float  value, uint clusterSize) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupClusteredMul(vec2   value, uint clusterSize) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupClusteredMul(vec3   value, uint clusterSize) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupClusteredMul(vec4   value, uint clusterSize) noexcept;
+[[spirv::builtin]] int    gl_subgroupClusteredMul(int    value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupClusteredMul(ivec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupClusteredMul(ivec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupClusteredMul(ivec4  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uint   gl_subgroupClusteredMul(uint   value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupClusteredMul(uvec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupClusteredMul(uvec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupClusteredMul(uvec4  value, uint clusterSize) noexcept;
+[[spirv::builtin]] double gl_subgroupClusteredMul(double value, uint clusterSize) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupClusteredMul(dvec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupClusteredMul(dvec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupClusteredMul(dvec4  value, uint clusterSize) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupClusteredMin(float  value, uint clusterSize) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupClusteredMin(vec2   value, uint clusterSize) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupClusteredMin(vec3   value, uint clusterSize) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupClusteredMin(vec4   value, uint clusterSize) noexcept;
+[[spirv::builtin]] int    gl_subgroupClusteredMin(int    value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupClusteredMin(ivec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupClusteredMin(ivec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupClusteredMin(ivec4  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uint   gl_subgroupClusteredMin(uint   value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupClusteredMin(uvec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupClusteredMin(uvec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupClusteredMin(uvec4  value, uint clusterSize) noexcept;
+[[spirv::builtin]] double gl_subgroupClusteredMin(double value, uint clusterSize) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupClusteredMin(dvec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupClusteredMin(dvec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupClusteredMin(dvec4  value, uint clusterSize) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupClusteredMax(float  value, uint clusterSize) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupClusteredMax(vec2   value, uint clusterSize) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupClusteredMax(vec3   value, uint clusterSize) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupClusteredMax(vec4   value, uint clusterSize) noexcept;
+[[spirv::builtin]] int    gl_subgroupClusteredMax(int    value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupClusteredMax(ivec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupClusteredMax(ivec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupClusteredMax(ivec4  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uint   gl_subgroupClusteredMax(uint   value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupClusteredMax(uvec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupClusteredMax(uvec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupClusteredMax(uvec4  value, uint clusterSize) noexcept;
+[[spirv::builtin]] double gl_subgroupClusteredMax(double value, uint clusterSize) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupClusteredMax(dvec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupClusteredMax(dvec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupClusteredMax(dvec4  value, uint clusterSize) noexcept;
+
+[[spirv::builtin]] int    gl_subgroupClusteredAnd(int    value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupClusteredAnd(ivec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupClusteredAnd(ivec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupClusteredAnd(ivec4  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uint   gl_subgroupClusteredAnd(uint   value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupClusteredAnd(uvec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupClusteredAnd(uvec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupClusteredAnd(uvec4  value, uint clusterSize) noexcept;
+[[spirv::builtin]] bool   gl_subgroupClusteredAnd(bool   value, uint clusterSize) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupClusteredAnd(bvec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupClusteredAnd(bvec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupClusteredAnd(bvec4  value, uint clusterSize) noexcept;
+
+[[spirv::builtin]] int    gl_subgroupClusteredOr(int    value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupClusteredOr(ivec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupClusteredOr(ivec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupClusteredOr(ivec4  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uint   gl_subgroupClusteredOr(uint   value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupClusteredOr(uvec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupClusteredOr(uvec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupClusteredOr(uvec4  value, uint clusterSize) noexcept;
+[[spirv::builtin]] bool   gl_subgroupClusteredOr(bool   value, uint clusterSize) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupClusteredOr(bvec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupClusteredOr(bvec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupClusteredOr(bvec4  value, uint clusterSize) noexcept;
+
+[[spirv::builtin]] int    gl_subgroupClusteredXor(int    value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupClusteredXor(ivec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupClusteredXor(ivec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupClusteredXor(ivec4  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uint   gl_subgroupClusteredXor(uint   value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupClusteredXor(uvec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupClusteredXor(uvec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupClusteredXor(uvec4  value, uint clusterSize) noexcept;
+[[spirv::builtin]] bool   gl_subgroupClusteredXor(bool   value, uint clusterSize) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupClusteredXor(bvec2  value, uint clusterSize) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupClusteredXor(bvec3  value, uint clusterSize) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupClusteredXor(bvec4  value, uint clusterSize) noexcept;
+
+// GL_KHR_shader_subgroup_quad
+
+[[spirv::builtin]] float  gl_subgroupQuadBroadcast(float  value, uint id) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupQuadBroadcast(vec2   value, uint id) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupQuadBroadcast(vec3   value, uint id) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupQuadBroadcast(vec4   value, uint id) noexcept;
+[[spirv::builtin]] int    gl_subgroupQuadBroadcast(int    value, uint id) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupQuadBroadcast(ivec2  value, uint id) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupQuadBroadcast(ivec3  value, uint id) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupQuadBroadcast(ivec4  value, uint id) noexcept;
+[[spirv::builtin]] uint   gl_subgroupQuadBroadcast(uint   value, uint id) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupQuadBroadcast(uvec2  value, uint id) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupQuadBroadcast(uvec3  value, uint id) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupQuadBroadcast(uvec4  value, uint id) noexcept;
+[[spirv::builtin]] bool   gl_subgroupQuadBroadcast(bool   value, uint id) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupQuadBroadcast(bvec2  value, uint id) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupQuadBroadcast(bvec3  value, uint id) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupQuadBroadcast(bvec4  value, uint id) noexcept;
+[[spirv::builtin]] double gl_subgroupQuadBroadcast(double value, uint id) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupQuadBroadcast(dvec2  value, uint id) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupQuadBroadcast(dvec3  value, uint id) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupQuadBroadcast(dvec4  value, uint id) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupQuadSwapHorizontal(float  value) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupQuadSwapHorizontal(vec2   value) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupQuadSwapHorizontal(vec3   value) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupQuadSwapHorizontal(vec4   value) noexcept;
+[[spirv::builtin]] int    gl_subgroupQuadSwapHorizontal(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupQuadSwapHorizontal(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupQuadSwapHorizontal(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupQuadSwapHorizontal(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupQuadSwapHorizontal(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupQuadSwapHorizontal(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupQuadSwapHorizontal(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupQuadSwapHorizontal(uvec4  value) noexcept;
+[[spirv::builtin]] bool   gl_subgroupQuadSwapHorizontal(bool   value) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupQuadSwapHorizontal(bvec2  value) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupQuadSwapHorizontal(bvec3  value) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupQuadSwapHorizontal(bvec4  value) noexcept;
+[[spirv::builtin]] double gl_subgroupQuadSwapHorizontal(double value) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupQuadSwapHorizontal(dvec2  value) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupQuadSwapHorizontal(dvec3  value) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupQuadSwapHorizontal(dvec4  value) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupQuadSwapVertical(float  value) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupQuadSwapVertical(vec2   value) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupQuadSwapVertical(vec3   value) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupQuadSwapVertical(vec4   value) noexcept;
+[[spirv::builtin]] int    gl_subgroupQuadSwapVertical(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupQuadSwapVertical(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupQuadSwapVertical(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupQuadSwapVertical(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupQuadSwapVertical(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupQuadSwapVertical(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupQuadSwapVertical(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupQuadSwapVertical(uvec4  value) noexcept;
+[[spirv::builtin]] bool   gl_subgroupQuadSwapVertical(bool   value) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupQuadSwapVertical(bvec2  value) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupQuadSwapVertical(bvec3  value) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupQuadSwapVertical(bvec4  value) noexcept;
+[[spirv::builtin]] double gl_subgroupQuadSwapVertical(double value) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupQuadSwapVertical(dvec2  value) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupQuadSwapVertical(dvec3  value) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupQuadSwapVertical(dvec4  value) noexcept;
+
+[[spirv::builtin]] float  gl_subgroupQuadSwapDiagonal(float  value) noexcept;
+[[spirv::builtin]] vec2   gl_subgroupQuadSwapDiagonal(vec2   value) noexcept;
+[[spirv::builtin]] vec3   gl_subgroupQuadSwapDiagonal(vec3   value) noexcept;
+[[spirv::builtin]] vec4   gl_subgroupQuadSwapDiagonal(vec4   value) noexcept;
+[[spirv::builtin]] int    gl_subgroupQuadSwapDiagonal(int    value) noexcept;
+[[spirv::builtin]] ivec2  gl_subgroupQuadSwapDiagonal(ivec2  value) noexcept;
+[[spirv::builtin]] ivec3  gl_subgroupQuadSwapDiagonal(ivec3  value) noexcept;
+[[spirv::builtin]] ivec4  gl_subgroupQuadSwapDiagonal(ivec4  value) noexcept;
+[[spirv::builtin]] uint   gl_subgroupQuadSwapDiagonal(uint   value) noexcept;
+[[spirv::builtin]] uvec2  gl_subgroupQuadSwapDiagonal(uvec2  value) noexcept;
+[[spirv::builtin]] uvec3  gl_subgroupQuadSwapDiagonal(uvec3  value) noexcept;
+[[spirv::builtin]] uvec4  gl_subgroupQuadSwapDiagonal(uvec4  value) noexcept;
+[[spirv::builtin]] bool   gl_subgroupQuadSwapDiagonal(bool   value) noexcept;
+[[spirv::builtin]] bvec2  gl_subgroupQuadSwapDiagonal(bvec2  value) noexcept;
+[[spirv::builtin]] bvec3  gl_subgroupQuadSwapDiagonal(bvec3  value) noexcept;
+[[spirv::builtin]] bvec4  gl_subgroupQuadSwapDiagonal(bvec4  value) noexcept;
+[[spirv::builtin]] double gl_subgroupQuadSwapDiagonal(double value) noexcept;
+[[spirv::builtin]] dvec2  gl_subgroupQuadSwapDiagonal(dvec2  value) noexcept;
+[[spirv::builtin]] dvec3  gl_subgroupQuadSwapDiagonal(dvec3  value) noexcept;
+[[spirv::builtin]] dvec4  gl_subgroupQuadSwapDiagonal(dvec4  value) noexcept;
+
+////////////////////////////////////////////////////////////////////////////////
+// GL_ARB_shader_clock
+
+// OpReadClockKHR
+[[spirv::builtin]] uint64_t gl_clock() noexcept;
 
 ////////////////////////////////////////////////////////////////////////////////
 // SPIRV data storage. These has internal linkage but are marked extern

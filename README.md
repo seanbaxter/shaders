@@ -9,6 +9,7 @@
     * [Using the compiler](#using-the-compiler)
     * [Shader attributes](#shader-attributes)
     * [Interface attributes](#interface-attributes)
+    * [DXIL attributes](#dxil-attributes)
 
 1. [Shaders as an embedded language](#shaders-as-an-embedded-language)
 
@@ -32,6 +33,7 @@
 
     [![teapot](images/teapot_small.png)](#the-tessellation-stages)
     * [Tessellation control](#tessellation-control)
+    * [Tessellation patch constants](#tessellation-patch-constants)
     * [Tessellation evaluation](#tessellation-evaluation)
 
 1. [The compute stage](#the-compute-stage)
@@ -80,7 +82,7 @@
 
     * [Shader parameters and push constants](#shader-parameters-and-push-constants)
     * [Chevron launches](#chevron-launches)
-    * [Physical storage buffers](#physcial-storage-buffers)
+    * [Physical storage buffers](#physical-storage-buffers)
     * [Lambda dispatch](#lambda-dispatch)
     * [Moderngpu for Vulkan](#moderngpu-for-Vulkan)
 
@@ -165,9 +167,19 @@ $ gcc -shared -fPIC stbi.c -o libstbi.so
 
 ### Using the compiler
 
-Enable shader generation with the `-shader` the command line switch.
+Enable shader generation with the `-shader` the command line switch. This switch injects the contents of the SPIR-V declarations file [implicit/spirv.cxx](implicit/spirv.cxx) into the translation unit, enabling builtin vectors and matrices, along with the full host of standard GLSL intrinsic functions.
 
-To process a C++ file and output a .spv module, use the `-c -emit-spirv` switches. The output file takes the name of the input file with the extension replaced with ".spv".
+By default, shaders that are named inside the `@spirv` or `@dxil` extensions are compiled to shader binary code and bound to the compiled object. This is the preferred single-source mode of translation. However, there are are additional options for separate-source translation:
+
+* `-emit-spirv -c` to emit a SPIR-V module. This has `.spv` extension.
+* `-emit-dxil -c` to emit a DXIL module. This has `.dxil` extension.
+* `-emit-dxil -S` to emit a DXIL IR file. This is human-readable LLVM and has a `.dxilasm` extension.
+* `-emit-dxil -S -console` to print DXIL disassembly to the terminal.
+
+Use the `-E` entry point option with any of the above options to specify which shader to compiler.
+* `-E <entry-point>` chooses the shader entry point.
+
+### Examples
 
 **vert.cxx**
 ```cpp
@@ -265,27 +277,15 @@ $ spirv-dis vert3.spv
 Mark shader entry points with one of these attributes:
 
 * `[[spirv::vert]]` - Vertex stage.
-* `[[spirv::tesc(num_vertices)]]` - Tessellation control stage. 
+* `[[spirv::tesc(primitive, num_vertices)]]` - Tessellation control stage. 
     `num_vertices` - Incoming patch size.
-* `[[spirv::tese(primitive, spacing, ordering)]]` - Tessellation evaluation stage. 
-    `primitive`, `spacing` and `ordering` must be values from these enumerations:
-
+* `[[spirv::tese(primitive)]]` - Tessellation evaluation stage.
 ```cpp
 enum class gltese_primitive_t : unsigned {
-  triangles,
+  triangles_cw,
+  triangles_ccw,
   quads,
   isolines,
-};
-
-enum class gltese_spacing_t : unsigned {
-  equal,
-  fractional_even,
-  fractional_odd,
-};
-
-enum class gltese_ordering_t : unsigned {
- cw,
- ccw, 
 };
 ```
 * `[[spirv::geom(input, output, max_vertices)]]` - Geometry stage.
@@ -337,14 +337,49 @@ enum class glmesh_output_t : unsigned {
 The `spirv::local_size` attribute is required when declaring compute, task and mesh stages.
 * `[[spirv::local_size(x, y, z)]]` - The workgroup size. The `x` argument is mandatory. The `y` and `z` arguments are optional.
 
+Tessellation shaders incorporate additional optional attributes. These two attributes may be provided on tessellation control shader when targeting D3D12 tessellation evaluation when targeting OpenGL. Vulkan supports the attribute on either shader stage.
+
+* `[[spirv::output(output)]]` - The type of geometry emitted. This is different from the patch primitive topology, which describes the input geometry.
+* `[[spirv::spacing(spacing)]]` - The subdivision algorithm.
+
+```cpp
+enum class gltess_primitive_t : unsigned {
+  triangles,
+  quads,
+  isolines,
+};
+
+enum class gltess_output_t : unsigned {
+ points,
+ lines,
+ triangle_cw,
+ triangle_ccw,
+};
+
+enum class gltess_spacing_t : unsigned {
+  equal,
+  fractional_even,
+  fractional_odd,
+};
+```
+
+Circle supports DXIL constructs with a few new attributes:
+
+* `dxil::patch_constant(f)` - Tessellation control shaders/hull shaders may set the `gltesc_LevelInner` and `gltesc_LevelOuter` variables from a special patch constant function, which is invoked once per patch. This is mandatory for DXIL shaders and optional for SPIR-V shaders.
+* `dxil::max_tess_factor(factor)` - Hull shaders may specify a max tessellation factor, up to 64. DXIL only.
+
 ### Interface attributes
 
 Shaders stages are distinguished by a shader attribute. Interface variables are distinguished by interface attributes. In all cases, the interface attribute name indicates the storage class for the variable.
 
 * `[[spirv::in]]` - Input scalar or vector. Requires a `spirv::location` attribute.
+* `[[spirv::in(location)]]` - Input scalar or vector that takes location operand.
 * `[[spirv::out]]` - Output scalar or vector. Requires a `spirv::location` attribute.
+* `[[spirv::out]]` - Output scalar or vector that takes location operation.
 * `[[spirv::uniform]]` - A `Uniform` or `UniformConstant` interface variable. The former require a `spirv::binding` and optional `spirv::set`. The latter require a `spirv::location` attribute.
+* `[[spirv::uniform(binding [, set])]]` - Specify the uniform storage class and take the resource binding and optional descriptor set values as operands.
 * `[[spirv::buffer]]` - Shader stage storage buffer. Requires `spirv::binding`. Optional `spirv::set`.
+* `[[spirv::buffer(binding [, set])]]` - Specify the buffer storage class and take the resource binding and optional descriptor set values as operands.
 * `[[spirv::shared]]` - Workgroup shared memory. Declare these inside a compute, task or mesh shader.
 * `[[spirv::push]]` - Push constant. Vulkan only. Defaults to 128 byte structure.
 * `[[spirv::push(max-size)]]` - Push constant with explicit structure size limit.
@@ -421,6 +456,9 @@ There are some mutually-exclusive auxiliary modifiers:
 * `[[spirv::noperspective]] and [[spirv::flat]]` - Control interpolation of shader stage attributes. Use at most one of these.
 * `[[spirv::patch]]`, `[[spirv::centroid]]` and `[[spirv::sample]]` - Use at most one of these.
 
+* `dxil::semantic(name)` - Identifies a semantic name to an `in` or `out` interface variable. A `spirv::location` attribute cannot be declared for the same variable. Special variables starting with "SV_" are not supported with this attribute.
+* * `dxil::semantic(name, index)` - The two-operand version is easier to specialize. The string name identifies the element without an index. The index operand may be any constant expression, including one dependent on a template parameter. During instantiation, the integer index is evaluated, turned into a string, and concatenated with the preceding name.
+
 ## Shaders as an embedded language
 
 The Circle shader extension aims to bring the entire capability of the OpenGL Shading Language (GLSL) into C++ as a first-class language feature. Write graphics code using Standard C++ and mark interface variables and shader functions with C++ attributes to indicate their role in the graphics pipeline. When the program is compiled, all shader declarations are lowered to the SPIR-V binary intermediate representation, which is the portable shader storage format Vulkan and OpenGL programs.
@@ -472,22 +510,22 @@ Even in their vanilla forms, the shader functions and interface variables as exp
 
 [**cube/cube.cxx**](cube/cube.cxx)
 ```cpp
-[[using spirv: in, location(0)]]
+[[spirv::in(0)]]
 vec3 in_position_vs;
 
-[[using spirv: in, location(1)]]
+[[spirv::in(1)]]
 vec2 in_texcoord_vs;
 
-[[using spirv: out, location(1)]]
+[[spirv::out(1)]]
 vec2 out_texcoord_vs;
 
-[[using spirv: in, location(1)]]
+[[spirv::in(1)]]
 vec2 in_texcoord_fs;
 
-[[using spirv: out, location(0)]]
+[[spirv::out(0)]]
 vec4 out_color_fs;
 
-[[using spirv: uniform, binding(0)]]
+[[spirv::uniform(0)]]
 sampler2D texture_sampler;
 
 struct uniforms_t {
@@ -495,7 +533,7 @@ struct uniforms_t {
   float seconds;
 };
 
-[[using spirv: uniform, binding(0)]]
+[[spirv::uniform(0)]]
 uniforms_t uniforms;
 
 [[spirv::vert]]
@@ -529,16 +567,9 @@ Maybe the most conspicuous difference is that the vertex and fragment shaders ar
 
 The next thing to catch your eye is probably the unfamiliar look of the C++ attribute:
 ```cpp
-[[using spirv: in, location(0)]]
+[[spirv::in(0)]]
 vec3 in_position_vs;
 ```
-
-That `using` token at the front? It opens an _attribute_ namespace. Subsequent attribute names all come from this namespace. If you prefer the feel of it, you can write this is an equivalent piece of code:
-```cpp
-[[spirv::in, spirv::location(0)]]
-vec3 in_position_vs;
-```
-By carving out a `spirv` namespace, the compiler avoids naming conflicts with other extensions that may use C++ attributes.
 
 This declaration is the C++ equivalent of this bit of GLSL:
 ```cpp
@@ -546,7 +577,7 @@ layout(location=0)
 in vec3 in_position_vs;
 ```
 
-How do you declare a uniform buffer? Simply use a `[[spirv::uniform]]` storage class on a namespace-scope object declaration. A `binding` attribute is also required. The shader uses the layout of the type according to the Itanium C++ ABI. This is different from the `std140` layout of GLSL. See the [layout](#layout) section for C++ attributes to arrange data members according to the `std140`, `std430` or `scalar` buffer layouts.
+How do you declare a uniform buffer? Simply use a `[[spirv::uniform]]` storage class on a namespace-scope object declaration. A `binding` attribute is also required, or can be passed as an operand of `spirv::uniform`. The shader uses the layout of the type according to the Itanium C++ ABI. This is different from the `std140` layout of GLSL. See the [layout](#layout) section for C++ attributes to arrange data members according to the `std140`, `std430` or `scalar` buffer layouts.
 
 The interface variables appear to be global variables, but they don't actually emit any storage on the host side. Fundamentally these declarations relate type with layout qualifiers and storage class. On the host, the user can't write to or read from any of these interface variables; you'd get an undefined symbol error. To change the data the uniform buffer refers to, use the appropriate Vulkan or OpenGL API with the interface variable's binding location.
 
@@ -587,7 +618,7 @@ I use variable templates for shader interface variables all the time. Interface 
 ```cpp
 // The interface variable template. This can go in a library.
 template<typename type_t, int I>
-[[using spirv: out, location(I)]]
+[[using spirv: out(I)]]
 type_t shader_out;
 
 // A fragment shader that writes a blue output.
@@ -665,11 +696,11 @@ Pack-yielding versions of these extensions are also provided, so you can access 
 
 ```cpp
 template<auto index, typename type_t = @enum_type(index)>
-[[using spirv: in, location((int)index)]]
+[[using spirv: in((int)index)]]
 type_t shader_in;
 
 template<auto index, typename type_t = @enum_type(index)>
-[[using spirv: out, location((int)index)]]
+[[using spirv: out((int)index)]]
 type_t shader_out;
 
 enum typename vattrib_t {
@@ -711,7 +742,7 @@ struct uniforms_t {
   float seconds;
 };
 
-[[using spirv: uniform, binding(0)]]
+[[spirv:::uniform(0)]]
 uniforms_t uniforms;
 
 [[spirv::vert]]
@@ -882,7 +913,7 @@ The tessellation control and evaluation stages round out the raster pipeline. Th
 [**teapot/teapot.cxx**](teapot.cxx)
 ```cpp
 template<typename tess_t>
-[[spirv::tesc(16)]]
+[[spirv::tesc(quads, 16)]]
 void tesc_shader() {
   vec3 v00 = gltesc_Input[0].Position.xyz;
   vec3 v10 = gltesc_Input[3].Position.xyz;
@@ -900,12 +931,13 @@ void tesc_shader() {
   gltesc_LevelInner[0] = .5f * (gltesc_LevelOuter[1] + gltesc_LevelOuter[3]);
   gltesc_LevelInner[1] = .5f * (gltesc_LevelOuter[0] + gltesc_LevelOuter[2]);
 
-  gltesc_Output[gltesc_InvocationID].Position = 
-    gltesc_Input[gltesc_InvocationID].Position;
+  gltesc_Output.Position = gltesc_Input[gltesc_InvocationID].Position;
 }
 ```
 
 The control shader (tesc) is the first tessellation stage. It consumes a patch of vertices and analyzes them to set tessellation levels. It usually passes the input vertex patches through to the evaluation stage.
+
+**Compatibility Note:** Unlike in GLSL, output variables from tessellation control, including `gltesc_Output`, are not array types in Circle. When generating SPIR-V, these output variables are implicitly converted into arrays and indexed with `gltesc_InvocationID`, the only legal subscript. This change was made to bring compatibility with the DXIL backend, which only supports non-array type outputs in the domain stage.
 
 The Circle `spirv::tesc` attribute takes one argument: the number of patch vertices. This corresponds with a host call to `glPatchParameteri(GL_PATCH_VERTICES, count)` to set the patch size on the vertex array. This example also templates the tessellation levels logic. Note the four `get_level` calls:
 
@@ -956,10 +988,47 @@ To generate a shader from the `tesc_shader` function template, we have to ODR us
 
 Note the `float edge_length = 100` defaulted data member. This default is not applied to the uniform buffer object itself, since interface variables are not _really_ instantiated. Instead, it applies to normal instantiations of the type on the host or on the GPU. In this example, its instantiated as a data member of `myapp_t` and copied into the uniform buffer each frame.
 
+### Tessellation patch constants
+
+HLSL requires that tessellation inner and outer factors be written by a _patch constant function_, not by the hull shader. In HLSL, the patch constant function is attached to the hull shader with a [`patchconstantfunc`](https://docs.microsoft.com/en-us/windows/win32/direct3d11/direct3d-11-advanced-stages-hull-shader-design) attribute. For compatibility with DXIL (the byte code language of HLSL), Circle C++ shaders supports a `dxil::patch_constant` attribute for tessellation control shader stages.
+
+[**teapot2/teapot2.cxx**](teapot2.cxx)
+```cpp
+template<typename tess_t>
+void patch_function() {
+  vec3 v00 = gltesc_Input[0].Position.xyz;
+  vec3 v10 = gltesc_Input[3].Position.xyz;
+  vec3 v01 = gltesc_Input[12].Position.xyz;
+  vec3 v11 = gltesc_Input[15].Position.xyz;
+
+  // Make a counter-clockwise pass from OL0 through OL3. See Figure 11.1 
+  // in OpenGL 4.6 specification.
+  gltesc_LevelOuter[0] = shader_ubo<0, tess_t>.get_level(v01, v00);
+  gltesc_LevelOuter[1] = shader_ubo<0, tess_t>.get_level(v00, v10);
+  gltesc_LevelOuter[2] = shader_ubo<0, tess_t>.get_level(v10, v11);
+  gltesc_LevelOuter[3] = shader_ubo<0, tess_t>.get_level(v11, v01);
+
+  // Average the opposing outer edges for inner edge levels.
+  gltesc_LevelInner[0] = .5f * (gltesc_LevelOuter[1] + gltesc_LevelOuter[3]);
+  gltesc_LevelInner[1] = .5f * (gltesc_LevelOuter[0] + gltesc_LevelOuter[2]);
+}
+
+template<typename tess_t>
+[[spirv::tesc(quads, 16), dxil::patch_constant(patch_function<tess_t>)]]
+void tesc_shader() {
+  gltesc_Output.Position = gltesc_Input[gltesc_InvocationID].Position;
+}
+```
+
+Factor the code that reads patch inputs and writes `gltesc_LevelOuter` and `gltesc_LevelInner` to its own patch function. This may be a function template, and it can be specialized from the `dxil::patch_constant` operand. HLSL's motivation is to allow the GPU to evaluate this function with just a single thread, since all all tess level outputs should be the same to avoid undefined behavior.
+
+Path constant functions are a cross-target mechanism in Circle shaders. Even though they aren't available in GLSL, they are in the Circle SPIR-V target, so use them, because you get DXIL support as well.
+
 ### Tessellation evaluation
 
+[**teapot/teapot.cxx**](teapot.cxx)
 ```cpp
-[[spirv::tese(quads, fractional_even, ccw)]]
+[[using spirv: tese(quads, 16), output(triangle_ccw), spacing(fractional_even)]]
 void tese_shader() {
   float u = gltese_TessCoord.x;
   float v = gltese_TessCoord.y;
@@ -1014,28 +1083,32 @@ void frag_shader() {
 
 The evaluation shader (tesc) is the second tessellation shader. It takes in primitives generated by the GPU according to the tessellation levels set by the previous shader stage. It has to declare what kinds of primitives inputs it expects.
 
-The Circle `spirv::tese` attribute takes three enumeration arguments:
-
 ```cpp
-enum class gltese_primitive_t {
+enum class gltess_primitive_t : unsigned {
   triangles,
   quads,
   isolines,
 };
+```
 
-enum class gltese_spacing_t {
+The `spirv::tese` operands reiterate the kind of input patch and patch size. We're working with Bezier patches, so `quads` is passed, with 16 input points. 
+
+```cpp
+enum class gltess_output_t : unsigned {
+ points,
+ lines,
+ triangle_cw,
+ triangle_ccw,
+};
+
+enum class gltess_spacing_t : unsigned {
   equal,
   fractional_even,
   fractional_odd,
 };
-
-enum class gltese_ordering_t {
- cw,
- ccw, 
-};
 ```
 
-The `gltese_primitive_t` argument reiterates the kind of input patch. We're working with Bezier patches, so `quads` is passed. The `gltese_spacing_t` argument selects between different spacing strategies: I think `fractional_even` looks best. The `gltese_ordering_t` argument specifies the winding order of the input primitive, either clockwise or counter-clockwise. Since output geometry isn't provided by the vertex array object (instead, patch geometry is), the primitive and winding order parameters must be specified on the shaders themselves.
+The `output` attribute specifies the form of output: `points`, `lines`, `triangle_cw` or `triangle_cw`. The `spacing` attribute instructs the tesselator on how to divide the outer and inner edges.
 
 ## The compute stage
 
@@ -1048,13 +1121,13 @@ This example is an OpenGL 4.6 and Circle shader rewrite of the classic n-body CU
 
 [**nbody/nbody.cxx**](nbody/nbody.cxx)
 ```cpp
-[[using spirv: buffer, binding(0)]]
+[[using spirv: buffer(0)]]
 vec4 buffer_pos_in[];
 
-[[using spirv: buffer, binding(1)]]
+[[using spirv: buffer(1)]]
 vec4 buffer_pos_out[];
 
-[[using spirv: buffer, binding(2)]]
+[[using spirv: buffer(2)]]
 vec4 buffer_vel[];
 
 // Return the force on a from the influence of b.
@@ -4059,14 +4132,13 @@ There are many features in development:
 * Separated samplers/textures. (Vulkan only.)
 * Subpass inputs. (Vulkan only.)
 
-* A `#pragma spirv` namespace for issuing module-wide SPIR-V directives.
+* A `#pragma spirv` namespace for issuing module-wide SPIR-V and DXIL directives.
 
 * A pipeline-like markup for naming shaders which may appear in the same shader program. This will enable automatic assignment of resources bindings.
 
 Some larger features I want to get to ASAP:
 
 * A Circle compiler for Windows. I need Microsoft's cooperation in accessing the Visual C++ ABI docs for this to happen.
-* A Circle extension for DXIR, to support Direct3D programs.
 * A Circle extension for the PlayStation Shading Language (PSSL) binary format, to support PS4 and PS5.
 
 A single set of shader attributes can be rich enough for all three shader backend targets, so that the `spirv` attribute namespace can be replaced with the more generic `shader` namespace.

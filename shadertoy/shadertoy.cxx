@@ -21,6 +21,19 @@
 // Interlacing
 #include "adam7.hxx"
 
+template<typename type_t>
+const char* enum_to_string(type_t x) {
+  switch(x) {
+    @meta for enum(type_t e : type_t) {
+      case e:
+        return @enum_name(e);
+    }
+    default:
+      return "unknown";
+  }
+}
+
+
 namespace imgui {
   // imgui attribute tags.
   using color3   [[attribute]] = void;
@@ -43,6 +56,7 @@ namespace imgui {
 // Return true if any option has changed.
 template<typename options_t>
 bool render_imgui(options_t& options, const char* child_name = nullptr) {
+  ImGui::SetColorEditOptions(ImGuiColorEditFlags_Float);
 
   bool changed = false;
   if(!child_name || 
@@ -134,6 +148,27 @@ bool render_imgui(options_t& options, const char* child_name = nullptr) {
       } else if constexpr(std::is_same_v<type_t, int>) {
         changed |= ImGui::DragInt(name, &value);
 
+      } else if constexpr(std::is_enum_v<type_t>) {
+
+        if(ImGui::BeginCombo(name, enum_to_string(value))) {
+          type_t cur = value;
+
+          @meta for enum(type_t e : type_t) {
+            if(ImGui::Selectable(@enum_name(e), e == cur))
+              value = e;
+            if(e == cur)
+              ImGui::SetItemDefaultFocus();
+          }
+          changed |= cur != value;
+
+          ImGui::EndCombo(); 
+        }
+
+      } else if constexpr(std::is_same_v<type_t, std::complex<float>>) {
+        float data[2] { value.real(), value.imag() };
+        changed |= ImGui::DragFloat2(name, data, .01f);
+        value.real(data[0]); value.imag(data[1]);
+
       } else if constexpr(std::is_class_v<type_t>) {
         // Iterate over each data member.
         changed |= render_imgui(value, name);
@@ -200,6 +235,244 @@ inline vec2 rot(vec2 p, float a) {
   return rot(p, vec2(), a);
 }
 
+// https://github.com/hughsk/glsl-hsv2rgb/blob/master/index.glsl
+inline vec3 hsv2rgb(vec3 c) {
+  vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+  vec3 p = abs(fract(c.x + K.xyz) * 6 - K.w);
+  return c.z * mix(K.x, saturate(p - K.x), c.y);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct [[
+  .imgui::title="Mandelbrot Orbit Trap Periods",
+  .imgui::url="https://www.shadertoy.com/view/Wl2Gz1"
+]] fractal_traps_t {
+  // orion elenzil 20190521
+  // inspired by https://www.shadertoy.com/view/wtfGWS
+
+  typedef std::complex<float> complex_t;
+
+  // Point of interest.
+  struct poi_t {
+    complex_t center;
+    float range;
+    int max_iter;
+  };
+
+  struct result_t {
+    int iterations;
+    int cycle_len1;
+    int cycle_len2;
+  };
+
+  result_t mandel_escape_iters(complex_t c, complex_t offset, float angle) {
+    complex_t c1 = std::polar(magnitude, angle);
+    complex_t c2 = c1 / magnitude * .2f;
+    c1 += offset;
+    c2 += offset;
+
+    complex_t z = c;
+
+    int cycle_len1 = 0, cycle_len2 = 0;
+    int i = 0;
+    while(i < max_iter) {
+      // Advance to the next iteration.
+      z = z * z + c;
+
+      if(!cycle_len1 && abs(1 - abs(z - c1)) < .015f)
+        cycle_len1 = i;
+
+      if(!cycle_len2 && abs(.2f - abs(z - c2)) < .01f)
+        cycle_len2 = i;
+
+      if(norm(z) > 4)
+        break;
+
+      ++i;
+    }
+
+    return { i, cycle_len1, cycle_len2 };
+  }
+
+  vec4 render(vec2 frag_coord, shadertoy_uniforms_t u) {
+    constexpr float PI2 = 2 * M_PIf32;
+    float short_len = min(u.resolution.x, u.resolution.y);
+    vec2 uv = (2 * frag_coord - u.resolution.xy) / short_len;
+
+    complex_t ocOff { };
+    if(any(u.mouse.xy > 50)) {
+      vec2 v = (2 * u.mouse.xy - u.resolution.xy) / short_len;
+      ocOff.real(v.x);
+      ocOff.imag(v.y);
+    }
+
+    vec3 color { };
+    complex_t c(uv.x, uv.y);
+    for(int m = 0; m < 2; ++m) {
+      for(int n = 0; n < 2; ++n) {
+        complex_t C = (c + complex_t(m, n) / complex_t(2.f * short_len)) * 
+          range + poi;
+        result_t result = mandel_escape_iters(C, ocOff, u.time);
+        float f = result.iterations != max_iter ? 
+          (float)result.iterations / max_iter :
+          0.f;
+
+        f = pow(f, .6f);
+        f *= .82f;
+
+        vec3 rgb = f * base_color;
+        if(result.cycle_len1 > 0) {
+          rgb += vec3(cos(PI2 * result.cycle_len1 / sample_count1) * .2f + magnitude);
+        }
+        if(result.cycle_len2 > 0) {
+          float hue = fract((float)result.cycle_len2 / sample_count2);
+          rgb += hsv2rgb(vec3(hue, .9, .8));
+        }
+
+
+        color += rgb;
+      }
+    }
+
+    color /= 4;
+    return vec4(color, 1);
+  }
+
+  // TODO: Expose complex_t to imgui?
+  complex_t poi = complex_t(-.2, 0);
+  [[.imgui::color3]] vec3 base_color = { .2, .6, 1. };
+  [[.imgui::range_float { .01, 2 }]] float range = 1.2;
+  [[.imgui::range_int  { 4, 512 }]] int max_iter = 90;
+  [[.imgui::range_float { 0, 1 } ]] float magnitude = .3;
+  [[.imgui::range_int { 1, 50 } ]] int sample_count1 = 20;
+  [[.imgui::range_int { 1, 50 } ]] int sample_count2 = 30;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct [[
+  .imgui::title="2D Clouds",
+  .imgui::url="https://www.shadertoy.com/view/4tdSWr"
+]] clouds_t {
+
+  vec2 hash(vec2 p) {
+    p = vec2(dot(p,vec2(127.1,311.7)), dot(p,vec2(269.5,183.3)));
+    return -1.0 + 2.0*fract(sin(p)*43758.5453123);
+  }
+
+  float noise(vec2 p) {
+    const float K1 = 0.366025404; // (sqrt(3)-1)/2;
+    const float K2 = 0.211324865; // (3-sqrt(3))/6;
+    vec2 i = floor(p + (p.x+p.y)*K1); 
+    vec2 a = p - i + (i.x+i.y)*K2;
+    vec2 o = (a.x>a.y) ? vec2(1.0,0.0) : vec2(0.0,1.0); //vec2 of = 0.5 + 0.5*vec2(sign(a.x-a.y), sign(a.y-a.x));
+    vec2 b = a - o + K2;
+    vec2 c = a - 1 + 2 * K2;
+    vec3 h = max(0.5f - vec3(dot(a,a), dot(b,b), dot(c,c)), 0.f );
+    vec3 n = h*h*h*h*vec3(dot(a,hash(i+0.0)), dot(b,hash(i+o)), dot(c,hash(i+1)));
+    return dot(n, vec3(70.0));  
+  }
+
+  float fbm(vec2 n) {
+    float total = 0.0, amplitude = 0.1;
+    for (int i = 0; i < 7; i++) {
+      total += noise(n) * amplitude;
+      n = m * n;
+      amplitude *= 0.4f;
+    }
+    return total;
+  }
+
+  vec4 render(vec2 frag_coord, shadertoy_uniforms_t u) {
+
+    vec2 p = frag_coord / u.resolution;
+    vec2 adjust(u.resolution.x / u.resolution.y, 1);
+    vec2 uv = p * adjust;
+    float q = fbm(uv * cloudscale * 0.5f);
+
+    // Don't make speed a tunable parameter, because we already use the 
+    // host's speed setting.
+    const float speed = .03;
+    float time = u.time * speed;
+    
+    //ridged noise shape
+    float r = 0.0;
+    uv *= cloudscale;
+    uv -= q - time;
+    float weight = 0.8;
+    for (int i=0; i<8; i++){
+      r += abs(weight*noise( uv ));
+      uv = m * uv + time;
+      weight *= 0.7f;
+    }
+    
+    //noise shape
+    float f = 0.0;
+    uv = p * adjust;
+    uv *= cloudscale;
+    uv -= q - time;
+    weight = 0.7;
+    for (int i=0; i<8; i++){
+      f += weight * noise(uv);
+      uv = m * uv + time;
+      weight *= 0.6f;
+    }
+    
+    f *= r + f;
+    
+    //noise colour
+    float c = 0.0;
+    time = u.time * speed * 2;
+    uv = p* adjust;
+    uv *= cloudscale * 2;
+    uv -= q - time;
+    weight = 0.4;
+    for (int i=0; i<7; i++){
+      c += weight * noise(uv);
+      uv = m * uv + time;
+      weight *= 0.6f;
+    }
+    
+    //noise ridge colour
+    float c1 = 0.0;
+    time = u.time * speed * 3;
+    uv = p * adjust;
+    uv *= cloudscale * 3;
+    uv -= q - time;
+    weight = 0.4;
+    for (int i=0; i<7; i++){
+      c1 += abs(weight*noise( uv ));
+      uv = m * uv + time;
+      weight *= 0.6f;
+    }
+  
+    c += c1;
+    
+    vec3 skycolour = mix(skycolour2, skycolour1, p.y);
+    vec3 cloudcolour = vec3(1.1, 1.1, 0.9) * 
+      saturate(clouddark + cloudlight * c);
+   
+    f = cloudcover + cloudalpha*f*r;
+    
+    vec3 result = mix(skycolour, saturate(skytint * skycolour + cloudcolour), 
+      saturate(f + c));
+    return vec4(result, 1);
+  }
+
+  [[.imgui::range_float { 0,  4 }]] float cloudscale = 1.1;
+  [[.imgui::range_float { 0,  1 }]] float clouddark = 0.5;
+  [[.imgui::range_float { 0,  1 }]] float cloudlight = 0.3;
+  [[.imgui::range_float { 0,  1 }]] float cloudcover = 0.6;
+  [[.imgui::range_float { 0, 10 }]] float cloudalpha = 8.0;
+  [[.imgui::range_float { 0,  1 }]] float skytint = 0.2;
+  [[.imgui::color3]] vec3 skycolour1 = vec3(0.2, 0.4, 0.6);
+  [[.imgui::color3]] vec3 skycolour2 = vec3(0.4, 0.7, 1.0);
+  mat2 m = mat2( 1.6,  1.2, -1.2,  1.6 );
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct [[
   .imgui::title="Devil Egg",
   .imgui::url="https://www.shadertoy.com/view/3tXXRX"
@@ -253,14 +526,14 @@ struct [[
     o += BackgroundColor;
     if(sd.x < 0)
       o -= sd.x * .6f;
-    o = clamp(o, 0.f, 1.f);
+    o = saturate(o);
 
     vec3 ayolk = 1 - smoothstep(0, fact * vec3(.2, .1, .2), sd.yyy);
     o = mix(o, YolkColor, ayolk);
     if(sd.y < 0)
       o -= sd.y * .1f;
 
-    o = clamp(o, 0.f, 1.f);
+    o = saturate(o);
     return o;
   }
 
@@ -287,7 +560,7 @@ struct [[
 
     o = pow(o, .5f);
     o += (hash32(frag_coord + t) - .5f) * FilmGrain;
-    o = clamp(o, 0.f, 1.f);
+    o = saturate(o);
     o *= 1 - length(13 * pow(abs(N), DarkEdge));
 
     return vec4(o, 1);
@@ -316,7 +589,7 @@ hypno_bands_t {
       return floor((x + (p * .5f)) / p) * p;
   }
   float dtoa(float d, float amount) {
-      return clamp(1 / (clamp(d, 1 / amount, 1.f) * amount), 0.f, 1.f);
+      return saturate(1 / (clamp(d, 1 / amount, 1.f) * amount));
   }
   float sdSegment1D(float uv, float a, float b) {
     return max(max(a - uv, 0.f), uv - b);
@@ -468,7 +741,7 @@ struct [[
       o = 1 - o;
 
     o *= 1 - dot(N, N * 2);
-    return vec4(clamp(o, 0, 1), 1);
+    return vec4(saturate(o), 1);
   }
 
   [[.imgui::range_float {   1,  10 }]] float Zoom = 5;
@@ -484,7 +757,7 @@ struct [[
   [[.imgui::range_float {  -2,   2 }]] float PhaseSpeed = .33;
   [[.imgui::range_float { -.1,  .1 }]] float WaveAmpOffset = .01;
   [[.imgui::color3]]                     vec3 Tint = vec3(.15, .5, .8);
-  bool InvertColors = false; 
+  bool InvertColors = true; 
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -612,7 +885,7 @@ struct [[
     o += (hash32(frag_coord + t) - .5f) * FilmGrain;
 
     o *= 1.1f - dot(N, N);
-    o = clamp(o, 0, 1);
+    o = saturate(o);
 
     return vec4(o, 1);
   }
@@ -659,7 +932,7 @@ struct [[
     vec4 o(c);
     vec3 col = vec3(
       // generate correlated colorants 0-1 from length, angle, exponent
-      clamp(l * l * l, 0.f, 1.f), 
+      saturate(l * l * l), 
       .5f * sin(a) + .5f,
       (ex - MinPow) / (MaxPow - MinPow)
     );
@@ -934,7 +1207,7 @@ struct segment_tracer_t {
 struct blobs_t {
 
   float Falloff(float x, float R) const {
-    float xx = clamp(x / R, 0.f, 1.f);
+    float xx = saturate(x / R);
     float y = 1 - xx * xx;
     return y * y * y;
   }
@@ -1200,9 +1473,9 @@ struct [[
       float f = (float)i / AOSamples;
       float h = 0.1f + f * R;
       float d = map(p + n * h, time);
-      r += clamp(h * D - d, 0.f, 1.f) * (1 - f);
+      r += saturate(h * D - d) * (1 - f);
     }
-    return clamp(1 - r, 0.f, 1.f);
+    return saturate(1 - r);
   }
 
   float spheretracing(vec3 ori, vec3 dir, float time, vec3& p) {
@@ -1278,6 +1551,402 @@ struct [[
   [[.imgui::color3]] vec3 Red = vec3(.6, .03, .08);
   [[.imgui::color3]] vec3 Orange = vec3(.3, .1, .1);
   [[.imgui::color3]] vec3 BG = vec3(0.05, 0.05, 0.075);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct [[
+  .imgui::title="Triangle Grid Contouring",
+  .imgui::url="https://www.shadertoy.com/view/WtfGDX"
+]] triangle_grid_t {
+
+  enum interpolation_t {
+    cubic,
+    quintic
+  };
+
+  mat2 rot2(float a) { 
+    float c = cos(a), s = sin(a); 
+    return mat2(c, -s, s, c); 
+  }
+
+  // vec2 to vec2 hash.
+  vec2 hash22(vec2 p, float time) { 
+    float n = sin(dot(p, vec2(41, 289)));
+    p = fract(vec2(262144, 32768) * n);
+    return sin(2 * M_PIf32 * p + time); 
+  }
+
+  // Based on IQ's gradient noise formula.
+  float n2D3G(vec2 p, float time) {
+    vec2 i = floor(p);
+    p -= i;
+    
+    vec4 v;
+    v.x = dot(hash22(i, time), p);
+    v.y = dot(hash22(i + vec2(1, 0), time), p - vec2(1, 0));
+    v.z = dot(hash22(i + vec2(0, 1), time), p - vec2(0, 1));
+    v.w = dot(hash22(i + 1, time), p - 1);
+
+    if(quintic == interpolation)
+      p = p*p*p*(p*(p*6 - 15) + 10.);
+    else
+      p = p*p*(3 - 2*p);
+
+    return mix(mix(v.x, v.y, p.x), mix(v.z, v.w, p.x), p.y);
+  }
+
+  float isoFunction(vec2 p, float time) { 
+    return n2D3G(p / 4 + .07f, time); 
+  }
+
+  // Unsigned distance to the segment joining "a" and "b".
+  float distLine(vec2 a, vec2 b) {
+    b = a - b;
+    float h = saturate(dot(a, b)/dot(b, b));
+    return length(a - b*h);
+  }
+
+  // Based on IQ's signed distance to the segment joining "a" and "b".
+  float distEdge(vec2 a, vec2 b){
+    return dot((a + b) * .5f, normalize((b - a).yx*vec2(-1, 1)) );
+  }
+
+  // Interpolating along the edge connecting vertices v1 and v2 with 
+  // respect to the isovalue.
+  vec2 inter(vec2 p1, vec2 p2, float v1, float v2, float isovalue) {
+    return mix(p1, p2, (isovalue - v1)/(v2 - v1)*.75f + .25f / 2); 
+  }
+
+  // Isoline function.
+  int isoLine(vec3 n3, vec2 ip0, vec2 ip1, vec2 ip2, float isovalue, float i, 
+    vec2& p0, vec2& p1) {
+    
+    // Points where the lines cut the edges.
+    p0 = vec2(1e5), p1 = vec2(1e5);
+
+    int iTh = 0;
+    //
+    // If the first vertex is over the isovalue threshold, add four, etc.
+    if(n3.x>isovalue) iTh += 4;
+    if(n3.y>isovalue) iTh += 2;
+    if(n3.z>isovalue) iTh += 1;
+    
+    // A value of 1 or 6 means constructing a line between the
+    // second and third edges, and so forth.
+    if(iTh == 1 || iTh == 6) { // 12-20         
+      p0 = inter(ip1, ip2, n3.y, n3.z, isovalue); // Edge two.
+      p1 = inter(ip2, ip0, n3.z, n3.x, isovalue); // Edge three.
+    } else if(iTh == 2 || iTh == 5) { // 01-12 
+      p0 = inter(ip0, ip1, n3.x, n3.y, isovalue); // Edge one.
+      p1 = inter(ip1, ip2, n3.y, n3.z, isovalue); // Edge two.   
+    } else if(iTh == 3 || iTh == 4) { // 01-20 
+      p0 = inter(ip0, ip1, n3.x, n3.y, isovalue); // Edge one.
+      p1 = inter(ip2, ip0, n3.z, n3.x, isovalue); // Edge three.  
+    }
+    
+    // For the last three cases, we're after the other side of
+    // the line, and this is a quick way to do that. Uncomment
+    // to see why it's necessary.
+    if(iTh>=4 && iTh<=6) { vec2 tmp = p0; p0 = p1; p1 = tmp; }
+    
+    // Just to make things more confusing, it's necessary to flip coordinates on 
+    // alternate triangles, due to the simplex grid triangle configuration. This 
+    // line basically represents an hour of my life that I won't get back. :D
+    if(i == 0) { vec2 tmp = p0; p0 = p1; p1 = tmp; }
+    
+    // Return the ID, which will be used for rendering purposes.
+    return iTh;  
+  }
+
+  vec3 simplexContour(vec2 p, float time) {
+
+    // Scaling constant.
+    const float gSc = 8.;
+    p *= gSc;
+    
+    // Keeping a copy of the orginal position.
+    vec2 oP = p;
+    
+    // Wobbling the coordinates, just a touch, in order to give a subtle hand drawn appearance.
+    p += vec2(n2D3G(p*3.5f, time), n2D3G(p*3.5f + 7.3f, time))*.015f;
+
+    // SIMPLEX GRID SETUP    
+    vec2 s = floor(p + (p.x + p.y)*.36602540378f); // Skew the current point.
+    p -= s - (s.x + s.y)*.211324865f; // Use it to attain the vector to the base vertex (from p).
+    
+    // Determine which triangle we're in. Much easier to visualize than the 3D version.
+    float i = p.x < p.y? 1 : 0; // Apparently, faster than: i = step(p.y, p.x);
+    vec2 ioffs = vec2(1 - i, i);
+    
+    // Vectors to the other two triangle vertices.
+    vec2 ip0 = vec2(0), ip1 = ioffs - .2113248654f, ip2 = vec2(.577350269); 
+    
+    // Centralize everything, so that vec2(0) is in the center of the triangle.
+    vec2 ctr = (ip0 + ip1 + ip2) / 3; // Centroid.
+    ip0 -= ctr; ip1 -= ctr; ip2 -= ctr; p -= ctr;   
+     
+    // Take a function value (noise, in this case) at each of the vertices of the
+    // individual triangle cell. Each will be compared the isovalue. 
+    vec3 n3;
+    n3.x = isoFunction(s, time);
+    n3.y = isoFunction(s + ioffs, time);
+    n3.z = isoFunction(s + 1, time);
+    
+    // Various distance field values.
+    float d = 1e5, d2 = 1e5, d3 = 1e5, d4 = 1e5, d5 = 1e5; 
+  
+    // The first contour, which separates the terrain (grass or barren) from the beach.
+    float isovalue = 0.;
+    
+    // The contour edge points that the line will run between. Each are passed into the
+    // function below and calculated.
+    vec2 p0, p1; 
+    
+    // The isoline. The edge values (p0 and p1) are calculated, and the ID is returned.
+    int iTh = isoLine(n3, ip0, ip1, ip2, isovalue, i, p0, p1);
+      
+    // The minimum distance from the pixel to the line running through the triangle edge 
+    // points.
+    d = min(d, distEdge(p - p0, p - p1)); 
+    
+    // Totally internal, which means a terrain (grass) hit.
+    if(iTh == 7) // 12-20  
+      d = 0;
+      
+    // Contour lines.
+    d3 = min(d3, distLine((p - p0), (p - p1))); 
+    // Contour points.
+    d4 = min(d4, min(length(p - p0), length(p - p1))); 
+    
+    // Displaying the 2D simplex grid. Basically, we're rendering lines between
+    // each of the three triangular cell vertices to show the outline of the 
+    // cell edges.
+    float tri = min(min(distLine(p - ip0, p - ip1), distLine(p - ip1, p - ip2)), 
+                  distLine(p - ip2, p - ip0));
+    
+    // Adding the triangle grid to the d5 distance field value.
+    d5 = min(d5, tri);
+     
+    
+    // Dots in the centers of the triangles, for whatever reason. :) Take them out, if
+    // you prefer a cleaner look.
+    d5 = min(d5, length(p) - .02f);   
+    
+    ////////
+    float td;
+    vec2 oldP0, oldP1;
+    if(triangle_countours) {
+      oldP0 = p0;
+      oldP1 = p1;
+
+      // Contour triangles: Flagging when the triangle cell contains a contour
+      // line, or not.
+      td = (iTh>0 && iTh<7)? 1 : 0;
+      
+      // Subdivide quads on the first contour.
+      if(iTh==3 || iTh==5 || iTh==6){
+       // Grass (non-beach land) only quads.
+       vec2 pt = p0;
+       if(i==1) pt = p1;
+       d5 = min(d5, distLine((p - pt), (p - ip0))); 
+       d5 = min(d5, distLine((p - pt), (p - ip1)));  
+       d5 = min(d5, distLine((p - pt), (p - ip2))); 
+      }
+    }
+ 
+    // The second contour: This one demarcates the beach from the sea.
+    isovalue = -.15;
+   
+    // The isoline. The edge values (p0 and p1) are calculated, and the ID is returned.
+    int iTh2 = isoLine(n3, ip0, ip1, ip2, isovalue, i, p0, p1);
+   
+    // The minimum distance from the pixel to the line running through the triangle edge 
+    // points.   
+    d2 = min(d2, distEdge(p - p0, p - p1)); 
+    
+    // Make a copy.
+    float oldD2 = d2;
+    
+    if(iTh2 == 7) d2 = 0.; 
+    if(iTh == 7) d2 = 1e5;
+    d2 = max(d2, -d);
+     
+    // Contour lines - 2nd (beach) contour.
+    d3 = min(d3, distLine((p - p0), (p - p1)));
+    // Contour points - 2nd (beach) contour.
+    d4 = min(d4, min(length(p - p0), length(p - p1))); 
+                
+    d4 -= .075f;
+    d3 -= .0125f;
+     
+    ////////
+    if(triangle_countours) {
+      // Triangulating the contours.
+
+      // Flagging when the triangle contains a second contour line, or not.
+      float td2 = (iTh2>0 && iTh2<7)? 1 : 0;
+       
+      if(td==1 && td2==1){
+        // Both contour lines run through a triangle, so you need to do a little more
+        // subdividing. 
+        
+        // The beach colored quad between the first contour and second contour.
+        d5 = min(d5, distLine(p - p0, p - oldP0)); 
+        d5 = min(d5, distLine(p - p0, p - oldP1));  
+        d5 = min(d5, distLine(p - p1, p - oldP1));
+         
+        // The quad between the water and the beach.
+        if(oldD2>0.){
+            vec2 pt = p0;
+            if(i==1.) pt = p1;
+            d5 = min(d5, distLine(p - pt, p - ip0)); 
+            d5 = min(d5, distLine(p - pt, p - ip1));  
+            d5 = min(d5, distLine(p - pt, p - ip2)); 
+        }
+      } else if(td==1 && td2==0) {
+        // One contour line through the triangle.
+        
+        // Beach and grass quads.
+        vec2 pt = oldP0;
+        if(i==1) pt = oldP1;
+        d5 = min(d5, distLine(p - pt, p - ip0)); 
+        d5 = min(d5, distLine(p - pt, p - ip1));  
+        d5 = min(d5, distLine(p - pt, p - ip2)); 
+      } else if(td==0 && td2==1) { 
+        // One contour line through the triangle.
+        
+        // Beach and water quads.
+        vec2 pt = p0;
+        if(i==1.) pt = p1;
+        d5 = min(d5, distLine(p - pt, p - ip0)); 
+        d5 = min(d5, distLine(p - pt, p - ip1));  
+        d5 = min(d5, distLine(p - pt, p - ip2));  
+      }
+    }
+    
+    // The screen coordinates have been scaled up, so the distance values need to be
+    // scaled down.
+    d /= gSc;
+    d2 /= gSc;
+    d3 /= gSc;
+    d4 /= gSc;    
+    d5 /= gSc; 
+    
+    // Rendering - Coloring.
+        
+    // Initial color.
+    vec3 col = vec3(1, .85, .6);
+    
+    // Smoothing factor.
+    float sf = .004; 
+   
+    // Water.
+    if(d > 0 && d2 > 0) col = vec3(1, 1.8, 3) * .45f;
+
+     // Water edging.
+    if(d > 0) col = mix(col, vec3(1, 1.85, 3)*.3f, 
+      (1 - smoothstep(0.f, sf, d2 - .012f)));
+    
+    // Beach.
+    col = mix(col, vec3(1.1, .85, .6),  (1. - smoothstep(0.f, sf, d2)));
+    // Beach edging.
+    col = mix(col, vec3(1.5, .9, .6)*.6f, (1. - smoothstep(0.f, sf, d - .012f)));
+    
+    if(grass) {
+      // Grassy terrain.
+      col = mix(col, vec3(1, .8, .6)*vec3(.7, 1., .75)*.95f, (1 - smoothstep(0.f, sf, d))); 
+    } else {
+      // Alternate barren terrain.
+      col = mix(col, vec3(1, .82, .6)*.95f, (1 - smoothstep(0.f, sf, d))); 
+    }
+
+    // Abstract shading, based on the individual noise height values for each triangle.
+    if(d2>0) col *= (abs(dot(n3, vec3(1)))*1.25f+ 1.25f)/2;
+    else col *= max(2 - (dot(n3, vec3(1)) + 1.45f)/1.25f, 0.f);
+    
+    // More abstract shading.
+    // if(iTh!=0) col *= float(iTh)/7.*.5 + .6;
+    // else col *= float(3.)/7.*.5 + .75;
+
+    if(triangle_pattern) {
+      // A concentric triangular pattern.
+      float pat = abs(fract(tri*12.5 + .4) - .5)*2.;
+      col *= pat*.425 + .75; 
+    }
+
+    // Triangle grid overlay.
+    col = mix(col, vec3(0), (1 - smoothstep(0.f, sf, d5))*.95f);
+    
+    // Lines.
+    col = mix(col, vec3(0), (1 - smoothstep(0.f, sf, d3)));
+    
+    // Dots.
+    col = mix(col, vec3(0), (1 - smoothstep(0.f, sf, d4)));
+    col = mix(col, vec3(1), (1 - smoothstep(0.f, sf, d4 + .005f)));
+  
+    // Rough pencil color overlay... 
+    // Tweaked to suit the brush stroke size.
+    vec2 q = oP*1.5f;
+    // I always forget this bit. Without it, the grey scale value will be above one, 
+    // resulting in the extra bright spots not having any hatching over the top.
+    col = min(col, 1.);
+    // Underlying grey scale pixel value -- Tweaked for contrast and brightness.
+    float gr = sqrt(dot(col, vec3(.299, .587, .114)))*1.25f;
+    // Stretched fBm noise layer.
+    float ns = 
+      (n2D3G(q * 4 * vec2(1./3., 3), time) * .64f + 
+        n2D3G(q * 8 * vec2(1./3., 3), time) * .34f) * .5f + .5f;
+
+    // Compare it to the underlying grey scale value.
+    ns = gr - ns;
+    //
+    // Repeat the process with a rotated layer.
+    q = rot2(M_PIf32 / 3) * q;
+    float ns2 = 
+      (n2D3G(q * 4 * vec2(1./3., 3), time) * .64f + 
+      n2D3G(q * 8 * vec2(1./3., 3), time) * .34f) * .5f + .5f;
+    ns2 = gr - ns2;
+    //
+    // Mix the two layers in some way to suit your needs. Flockaroo applied common sense, 
+    // and used a smooth threshold, which works better than the dumb things I was trying. :)
+    ns = smoothstep(0.f, 1.f, min(ns, ns2)); // Rough pencil sketch layer.
+    //
+    // Mix in a small portion of the pencil sketch layer with the clean colored one.
+    col = mix(col, col*(ns + .35f), .4f);
+
+    return col;
+  }
+
+  vec4 render(vec2 frag_coord, shadertoy_uniforms_t u) {
+    // Screen coordinates. I've put a cap on the fullscreen resolution to stop
+    // the pattern looking too blurred out.
+    vec2 uv = (frag_coord - u.resolution * .5f) / scale;
+     
+    // Position with some scrolling, and screen rotation to level the pattern.
+    vec2 p = rot2(M_PIf32 / 12) * uv + vec2(sqrt(2.f) / 2, .5f)* u.time / 16; 
+    
+    // The simplex grid contour map... or whatever you wish to call it. :)
+    vec3 col = simplexContour(p, u.time);
+    
+    // Subtle vignette.
+    uv = frag_coord / u.resolution;
+    // col *= pow(16 * uv.x * uv.y * (1 - uv.x) * (1 - uv.y), .0625f) + .1f;
+    
+    // Colored variation.
+    col = mix(col.zyx / 2, col, 
+      pow(16 * uv.x * uv.y * (1 - uv.x) * (1 - uv.y) , .125f));
+ 
+    // Rough gamma correction.
+    vec4 fragColor(sqrt(max(col, 0)), 1);
+    return fragColor;
+  }
+
+  [[.imgui::range_float { 200, 2000 }]] float scale = 650;
+  bool triangle_countours = false;
+  bool triangle_pattern = true;
+  bool grass = true;
+  interpolation_t interpolation = quintic;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1436,7 +2105,21 @@ struct [[
 
 // The MIT License
 // Copyright © 2013 Inigo Quilez
-// Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+// Permission is hereby granted, free of charge, to any person obtaining 
+// a copy of this software and associated documentation files (the "Software"), 
+// to deal in the Software without restriction, including without limitation 
+// the rights to use, copy, modify, merge, publish, distribute, sublicense, 
+// and/or sell copies of the Software, and to permit persons to whom the 
+// Software is furnished to do so, subject to the following conditions: 
+// The above copyright notice and this permission notice shall be included 
+// in all copies or substantial portions of the Software. THE SOFTWARE IS 
+// PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, 
+// INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+// FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS
+// OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+// WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF 
+// OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
+// SOFTWARE.
 
 // A list of useful distance function to simple primitives. All
 // these functions (except for ellipsoid) return an exact
@@ -1574,7 +2257,7 @@ struct capsule_t {
   float sd(vec3 p) const noexcept {
     p -= pos;
     vec3 pa = p - a, ba = b - a;
-    float h = clamp(dot(pa, ba) / dot2(ba), 0.f, 1.f);
+    float h = saturate(dot(pa, ba) / dot2(ba));
     return length(pa - ba * h) - r;
   }
 
@@ -1709,8 +2392,8 @@ struct cone_t {
     vec2 q = h * vec2(c.x, -c.y) / c.y;
     vec2 w(length(p.xz), p.y);
 
-    vec2 a = w - q * clamp(dot(w, q) / dot2(q), 0.f, 1.f);
-    vec2 b = w - q * vec2(clamp(w.x / q.x, 0.f, 1.f), 1.f);
+    vec2 a = w - q * saturate(dot(w, q) / dot2(q));
+    vec2 b = w - q * vec2(saturate(w.x / q.x), 1.f);
     float k = sign(q.y);
     float d = min(dot2(a), dot2(b));
     float s = max(k * (w.x * q.y - w.y * q.x), k * (w.y - q.y));
@@ -1731,7 +2414,7 @@ struct capped_cone_t {
     vec2 k1(r2, h);
     vec2 k2(r2 - r1, 2 * h);
     vec2 ca(q.x - min(q.x, q.y < 0 ? r1 : r2), abs(q.y) - h);
-    vec2 cb = q - k1 + k2 * clamp(dot(k1 - q, k2) / dot2(k2), 0.f, 1.f);
+    vec2 cb = q - k1 + k2 * saturate(dot(k1 - q, k2) / dot2(k2));
 
     float s = cb.x < 0 & ca.y < 0 ? -1.f : 1.f;
     return s * sqrt(min(dot2(ca), dot2(cb)));
@@ -1914,7 +2597,7 @@ struct [[
       if(occ > 0.35) 
         break;
     }
-    return clamp(1 - 3 * occ, 0.f, 1.f) * (0.5f + 0.5f * nor.y);
+    return saturate(1 - 3 * occ) * (0.5f + 0.5f * nor.y);
   }
 
   // http://iquilezles.org/www/articles/checkerfiltering/checkerfiltering.htm
@@ -1941,13 +2624,13 @@ struct [[
     float t = tmin;
     for(int i = 0; i < 24; ++i) {
       float h = map(ro + rd * t).x;
-      float s = clamp(8 * h / t, 0.f, 1.f);
+      float s = saturate(8 * h / t);
       res = min(res, s * s * (3 - 2 * s));
       t += clamp(h, 0.02f, 0.2f);
       if(res < 0.004f | t > tmax) 
         break;
     }
-    return clamp(res, 0.f, 1.f);
+    return saturate(res);
   }
 
   vec3 calcNormal(vec3 pos) const noexcept {
@@ -2029,12 +2712,12 @@ struct [[
       {
         vec3 lig = normalize(vec3(-.5, .4, -.6));
         vec3 hal = normalize(lig - rd);
-        float dif = clamp(dot(nor, lig), 0.f, 1.f);
+        float dif = saturate(dot(nor, lig));
 
         dif *= calcSoftshadow(pos, lig, 0.02, 2.5);
-        float spe = pow(clamp(dot(nor, hal), 0.f, 1.f), 16.f);
+        float spe = pow(saturate(dot(nor, hal)), 16.f);
         spe *= dif;
-        spe *= 0.04f + 0.96f * pow(clamp(1 - dot(hal, lig), 0.f, 1.f), 5.f);
+        spe *= 0.04f + 0.96f * pow(saturate(1 - dot(hal, lig)), 5.f);
         lin += col * 2.2f * dif * vec3(1.3, 1, 0.7);
         lin +=       5.0f * spe * vec3(1.3, 1, 0.7) * ks;
       }
@@ -2045,7 +2728,7 @@ struct [[
         dif *= occ;
         float spe = smoothstep(-.2f, .2f, ref.y);
         spe *= dif;
-        spe *= 0.04f + 0.96f * pow(clamp(1 + dot(nor, rd), 0.f, 1.f), 5.f);
+        spe *= 0.04f + 0.96f * pow(saturate(1 + dot(nor, rd)), 5.f);
         spe *= calcSoftshadow(pos, ref, .02, 2.5);
         lin += col * 0.6f * dif * vec3(0.4, 0.6, 1.15);
         lin +=       2.0f * spe * vec3(0.4, 0.6, 1.30) * ks;
@@ -2053,15 +2736,15 @@ struct [[
 
       // back
       {
-        float dif = clamp(dot(nor, normalize(vec3(0.5, 0.0, 0.6))), 0.f, 1.f) *
-          clamp(1 - pos.y, 0.f, 1.f);
+        float dif = saturate(dot(nor, normalize(vec3(0.5, 0.0, 0.6)))) *
+          saturate(1 - pos.y);
         dif *= occ;
         lin += col * 0.55f * dif * vec3(.25, .25, .25);
       }
 
       // sss
       {
-        float dif = pow(clamp(1 + dot(nor, rd), 0.f, 1.f), 2.f);
+        float dif = pow(saturate(1 + dot(nor, rd)), 2.f);
         dif *= occ;
         lin += col * .25f * dif * vec3(1);
       }
@@ -2070,7 +2753,7 @@ struct [[
       col = mix(col, vec3(0.7, 0.7, 0.9), 1 - exp(-.0001f * t * t * t));
     }
 
-    return vec3(clamp(col, 0.f, 1.f));
+    return vec3(saturate(col));
   }
 
   mat3 setCamera(vec3 ro, vec3 ta, float cr) const noexcept {
@@ -2156,7 +2839,171 @@ struct [[
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct [[
+  .imgui::title="wave intrinsics"
+]] wave_intrinsics_t {
+  float tex_pattern(vec2 texcoord) {
+    float scale = .13;
+    float t = sin(texcoord.x * scale) + cos(texcoord.y * scale);
+    float c = smoothstep(0.f, 0.2f, t * t);
+    return c;
+  }
+  
+  uint get_num_active_lanes() {
+    // Submit a flag for each active lane and add up the bits.
+    ivec4 bc = bitCount(gl_subgroupBallot(true));
+    uint num_active_lanes = bc.x + bc.y + bc.z + bc.w;
+    return num_active_lanes;
+  }
+
+  enum mode_t {
+    DefaultColoring,
+    ColorByLane,
+    FirstLaneWhite,
+    FirstWhiteLastRed,
+    ActiveLaneRatio,
+    BroadcastFirst,
+    AverageLanes,
+    PrefixSum,
+    QuadColoring,
+  };
+
+  vec4 render(vec2 frag_coord, shadertoy_uniforms_t u) {
+    vec2 pos = frag_coord;
+    float texP = tex_pattern(pos);
+    vec4 color = vec4(texP * pos / u.resolution, 0, 1);
+
+    if codegen(__is_spirv_target) {
+
+      switch(render_mode) {        
+        case DefaultColoring:
+          // Default coloring.
+          break;
+
+        case ColorByLane: {
+          // Color by lane ID.
+          float x = (float)gl_SubgroupInvocationID / gl_SubgroupSize;
+          color = vec4(x, x, x, 1);
+          break;
+        }
+
+        case FirstLaneWhite:
+          // Mark the first lane as white pixel.
+          if(gl_subgroupElect())
+            color = vec4(1);
+          break;
+
+        case FirstWhiteLastRed:
+          // Color the first lane white and the last active lane red.
+          if(gl_subgroupElect())
+            color = vec4(1);
+          else if(gl_SubgroupInvocationID == gl_subgroupMax(gl_SubgroupInvocationID))
+            color = vec4(1, 0, 0, 1);
+          break;
+     
+        case ActiveLaneRatio: {
+          float active_ratio = get_num_active_lanes() / float(gl_SubgroupSize);
+          color = vec4(active_ratio, active_ratio, active_ratio, 1);
+          break;
+        }
+        
+        case BroadcastFirst:
+          // Broadcast the color in the first lane.
+          color = gl_subgroupBroadcastFirst(color);
+          break;
+
+        case AverageLanes: {
+          // Paint the wave with the averaged color inside the wave.
+          color = gl_subgroupAdd(color) / get_num_active_lanes();
+          break;
+        }
+
+        case PrefixSum: {
+          // First, compute the prefix sum color each lane to first lane.
+          vec4 base_color = gl_subgroupBroadcastFirst(color);
+          vec4 prefix_color = gl_subgroupExclusiveAdd(color - base_color);
+
+          // Then, normalize by the number of active lanes.
+          color = prefix_color / get_num_active_lanes();
+          break;
+        }
+
+        case QuadColoring: {
+          float dx = gl_subgroupQuadSwapHorizontal(pos.x) - pos.x;
+          float dy = gl_subgroupQuadSwapVertical(pos.y) - pos.y;
+
+          if(dx > 0 && dy > 0)
+            color = vec4(1, 0, 0, 1);
+          else if(dx < 0 && dy > 0)
+            color = vec4(0, 1, 0, 1);
+          else if(dx > 0 && dy < 0)
+            color = vec4(0, 0, 1, 1);
+          else if(dx < 0 && dy < 0)
+            color = vec4(1, 1, 1, 1);
+          else
+            color = vec4(0, 0, 0, 1);
+          break;
+        }
+      }
+    }
+
+    return color;
+  }
+
+  mode_t render_mode = DefaultColoring;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct [[
+  .imgui::title="Thumbnails"
+]] thumbnails_t {
+  // Put 9 top shadertoys for a 3x3 display.
+  enum typename toys_t {
+    fractal_traps_t,
+    clouds_t,
+    devil_egg_t,
+
+    hypno_bands_t,
+    triangle_grid_t,
+    modulation_t,
+
+    keep_up_square_t,
+    menger_journey_t,
+    hypercomplex_t,
+  };
+  static_assert(9 == @enum_count(toys_t));
+
+  vec4 render(vec2 frag_coord, shadertoy_uniforms_t u) {
+    // Divide the display into a 3x3 display.
+    u.resolution /= 3;
+    ivec2 cell = (ivec2)(frag_coord / u.resolution);
+    frag_coord = mod(frag_coord, u.resolution);
+
+    vec4 color;
+    switch((toys_t)(cell.x + 3 * cell.y)) {
+      @meta for enum(toys_t e : toys_t) { 
+        case e: 
+          color = @("_", @enum_type_string(e)).render(frag_coord, u);
+          break;
+      }
+      default:
+        color = vec4(0);
+        break;
+    }
+
+    return color;
+  }
+
+  @enum_types(toys_t) @("_", @enum_type_strings(toys_t)) ...;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 enum typename class shader_program_t {
+  fractal_traps_t,
+  triangle_grid_t,
+  clouds_t,
   DevilEgg = devil_egg_t,
   HypnoBands = hypno_bands_t,
   Modulation = modulation_t,
@@ -2182,8 +3029,9 @@ enum typename class shader_program_t {
   Raymarcher = raymarch_prims_t,
   band_limited1_t,
   band_limited2_t,
+  wave_intrinsics_t,
+  thumbnails_t,
 };
-
 
 ////////////////////////////////////////////////////////////////////////////////
 

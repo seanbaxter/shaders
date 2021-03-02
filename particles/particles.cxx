@@ -59,7 +59,7 @@ struct SimParams {
 
 // Park the simulation parameters at ubo 1 and keep it there throughout the
 // frame. UBO 0 is reserved for gl_transform.
-[[using spirv: uniform, binding(1)]]
+[[spirv::uniform(1)]]
 SimParams sim_params_ubo;
 
 inline vec3 collide_spheres(vec3 posA, vec3 posB, vec3 velA, vec3 velB,

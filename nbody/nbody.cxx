@@ -21,7 +21,7 @@ struct uniforms_t {
 };
 
 // The uniform buffer is bound for integration and rendering.
-[[using spirv: uniform, binding(0)]]
+[[spirv::uniform(0)]]
 uniforms_t uniforms;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -29,13 +29,13 @@ uniforms_t uniforms;
 // Loop over all input positions and velocities and write new output 
 // positions and velocities.
 
-[[using spirv: buffer, binding(0)]]
+[[spirv::buffer(0)]]
 vec4 buffer_pos_in[];
 
-[[using spirv: buffer, binding(1)]]
+[[spirv::buffer(1)]]
 vec4 buffer_pos_out[];
 
-[[using spirv: buffer, binding(2)]]
+[[spirv::buffer(2)]]
 vec4 buffer_vel[];
 
 // Return the force on a from the influence of b.
@@ -105,7 +105,7 @@ void integrate_shader() {
 ////////////////////////////////////////////////////////////////////////////////
 // Rendering.
 
-[[using spirv: uniform, binding(0)]]
+[[spirv::uniform(0)]]
 sampler2D frag_texture;
 
 [[spirv::vert]]
