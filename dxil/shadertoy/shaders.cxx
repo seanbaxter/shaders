@@ -20,7 +20,6 @@ namespace imgui {
   using url      [[attribute]] = const char*;
 }
 
-
 template<int location, typename type_t>
 [[using spirv: in, location(location)]]
 type_t shader_in;
@@ -594,7 +593,7 @@ struct [[
   [[.imgui::range_float {  -2,   2 }]] float PhaseSpeed = .33;
   [[.imgui::range_float { -.1,  .1 }]] float WaveAmpOffset = .01;
   [[.imgui::color3]]                     vec3 Tint = vec3(.15, .5, .8);
-  bool InvertColors = false; 
+  int InvertColors = true; 
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1103,6 +1102,402 @@ struct [[
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct [[
+  .imgui::title="Triangle Grid Contouring",
+  .imgui::url="https://www.shadertoy.com/view/WtfGDX"
+]] triangle_grid_t {
+
+  enum interpolation_t {
+    cubic,
+    quintic
+  };
+
+  mat2 rot2(float a) { 
+    float c = cos(a), s = sin(a); 
+    return mat2(c, -s, s, c); 
+  }
+
+  // vec2 to vec2 hash.
+  vec2 hash22(vec2 p, float time) { 
+    float n = sin(dot(p, vec2(41, 289)));
+    p = fract(vec2(262144, 32768) * n);
+    return sin(2 * M_PIf32 * p + time); 
+  }
+
+  // Based on IQ's gradient noise formula.
+  float n2D3G(vec2 p, float time) {
+    vec2 i = floor(p);
+    p -= i;
+    
+    vec4 v;
+    v.x = dot(hash22(i, time), p);
+    v.y = dot(hash22(i + vec2(1, 0), time), p - vec2(1, 0));
+    v.z = dot(hash22(i + vec2(0, 1), time), p - vec2(0, 1));
+    v.w = dot(hash22(i + 1, time), p - 1);
+
+    if(quintic == interpolation)
+      p = p*p*p*(p*(p*6 - 15) + 10.);
+    else
+      p = p*p*(3 - 2*p);
+
+    return mix(mix(v.x, v.y, p.x), mix(v.z, v.w, p.x), p.y);
+  }
+
+  float isoFunction(vec2 p, float time) { 
+    return n2D3G(p / 4 + .07f, time); 
+  }
+
+  // Unsigned distance to the segment joining "a" and "b".
+  float distLine(vec2 a, vec2 b) {
+    b = a - b;
+    float h = saturate(dot(a, b)/dot(b, b));
+    return length(a - b*h);
+  }
+
+  // Based on IQ's signed distance to the segment joining "a" and "b".
+  float distEdge(vec2 a, vec2 b){
+    return dot((a + b) * .5f, normalize((b - a).yx*vec2(-1, 1)) );
+  }
+
+  // Interpolating along the edge connecting vertices v1 and v2 with 
+  // respect to the isovalue.
+  vec2 inter(vec2 p1, vec2 p2, float v1, float v2, float isovalue) {
+    return mix(p1, p2, (isovalue - v1)/(v2 - v1)*.75f + .25f / 2); 
+  }
+
+  // Isoline function.
+  int isoLine(vec3 n3, vec2 ip0, vec2 ip1, vec2 ip2, float isovalue, float i, 
+    vec2& p0, vec2& p1) {
+    
+    // Points where the lines cut the edges.
+    p0 = vec2(1e5), p1 = vec2(1e5);
+
+    int iTh = 0;
+    //
+    // If the first vertex is over the isovalue threshold, add four, etc.
+    if(n3.x>isovalue) iTh += 4;
+    if(n3.y>isovalue) iTh += 2;
+    if(n3.z>isovalue) iTh += 1;
+    
+    // A value of 1 or 6 means constructing a line between the
+    // second and third edges, and so forth.
+    if(iTh == 1 || iTh == 6) { // 12-20         
+      p0 = inter(ip1, ip2, n3.y, n3.z, isovalue); // Edge two.
+      p1 = inter(ip2, ip0, n3.z, n3.x, isovalue); // Edge three.
+    } else if(iTh == 2 || iTh == 5) { // 01-12 
+      p0 = inter(ip0, ip1, n3.x, n3.y, isovalue); // Edge one.
+      p1 = inter(ip1, ip2, n3.y, n3.z, isovalue); // Edge two.   
+    } else if(iTh == 3 || iTh == 4) { // 01-20 
+      p0 = inter(ip0, ip1, n3.x, n3.y, isovalue); // Edge one.
+      p1 = inter(ip2, ip0, n3.z, n3.x, isovalue); // Edge three.  
+    }
+    
+    // For the last three cases, we're after the other side of
+    // the line, and this is a quick way to do that. Uncomment
+    // to see why it's necessary.
+    if(iTh>=4 && iTh<=6) { vec2 tmp = p0; p0 = p1; p1 = tmp; }
+    
+    // Just to make things more confusing, it's necessary to flip coordinates on 
+    // alternate triangles, due to the simplex grid triangle configuration. This 
+    // line basically represents an hour of my life that I won't get back. :D
+    if(i == 0) { vec2 tmp = p0; p0 = p1; p1 = tmp; }
+    
+    // Return the ID, which will be used for rendering purposes.
+    return iTh;  
+  }
+
+  vec3 simplexContour(vec2 p, float time) {
+
+    // Scaling constant.
+    const float gSc = 8.;
+    p *= gSc;
+    
+    // Keeping a copy of the orginal position.
+    vec2 oP = p;
+    
+    // Wobbling the coordinates, just a touch, in order to give a subtle hand drawn appearance.
+    p += vec2(n2D3G(p*3.5f, time), n2D3G(p*3.5f + 7.3f, time))*.015f;
+
+    // SIMPLEX GRID SETUP    
+    vec2 s = floor(p + (p.x + p.y)*.36602540378f); // Skew the current point.
+    p -= s - (s.x + s.y)*.211324865f; // Use it to attain the vector to the base vertex (from p).
+    
+    // Determine which triangle we're in. Much easier to visualize than the 3D version.
+    float i = p.x < p.y? 1 : 0; // Apparently, faster than: i = step(p.y, p.x);
+    vec2 ioffs = vec2(1 - i, i);
+    
+    // Vectors to the other two triangle vertices.
+    vec2 ip0 = vec2(0), ip1 = ioffs - .2113248654f, ip2 = vec2(.577350269); 
+    
+    // Centralize everything, so that vec2(0) is in the center of the triangle.
+    vec2 ctr = (ip0 + ip1 + ip2) / 3; // Centroid.
+    ip0 -= ctr; ip1 -= ctr; ip2 -= ctr; p -= ctr;   
+     
+    // Take a function value (noise, in this case) at each of the vertices of the
+    // individual triangle cell. Each will be compared the isovalue. 
+    vec3 n3;
+    n3.x = isoFunction(s, time);
+    n3.y = isoFunction(s + ioffs, time);
+    n3.z = isoFunction(s + 1, time);
+    
+    // Various distance field values.
+    float d = 1e5, d2 = 1e5, d3 = 1e5, d4 = 1e5, d5 = 1e5; 
+  
+    // The first contour, which separates the terrain (grass or barren) from the beach.
+    float isovalue = 0.;
+    
+    // The contour edge points that the line will run between. Each are passed into the
+    // function below and calculated.
+    vec2 p0, p1; 
+    
+    // The isoline. The edge values (p0 and p1) are calculated, and the ID is returned.
+    int iTh = isoLine(n3, ip0, ip1, ip2, isovalue, i, p0, p1);
+      
+    // The minimum distance from the pixel to the line running through the triangle edge 
+    // points.
+    d = min(d, distEdge(p - p0, p - p1)); 
+    
+    // Totally internal, which means a terrain (grass) hit.
+    if(iTh == 7) // 12-20  
+      d = 0;
+      
+    // Contour lines.
+    d3 = min(d3, distLine((p - p0), (p - p1))); 
+    // Contour points.
+    d4 = min(d4, min(length(p - p0), length(p - p1))); 
+    
+    // Displaying the 2D simplex grid. Basically, we're rendering lines between
+    // each of the three triangular cell vertices to show the outline of the 
+    // cell edges.
+    float tri = min(min(distLine(p - ip0, p - ip1), distLine(p - ip1, p - ip2)), 
+                  distLine(p - ip2, p - ip0));
+    
+    // Adding the triangle grid to the d5 distance field value.
+    d5 = min(d5, tri);
+     
+    
+    // Dots in the centers of the triangles, for whatever reason. :) Take them out, if
+    // you prefer a cleaner look.
+    d5 = min(d5, length(p) - .02f);   
+    
+    ////////
+    float td;
+    vec2 oldP0, oldP1;
+    if(triangle_countours) {
+      oldP0 = p0;
+      oldP1 = p1;
+
+      // Contour triangles: Flagging when the triangle cell contains a contour
+      // line, or not.
+      td = (iTh>0 && iTh<7)? 1 : 0;
+      
+      // Subdivide quads on the first contour.
+      if(iTh==3 || iTh==5 || iTh==6){
+       // Grass (non-beach land) only quads.
+       vec2 pt = p0;
+       if(i==1) pt = p1;
+       d5 = min(d5, distLine((p - pt), (p - ip0))); 
+       d5 = min(d5, distLine((p - pt), (p - ip1)));  
+       d5 = min(d5, distLine((p - pt), (p - ip2))); 
+      }
+    }
+ 
+    // The second contour: This one demarcates the beach from the sea.
+    isovalue = -.15;
+   
+    // The isoline. The edge values (p0 and p1) are calculated, and the ID is returned.
+    int iTh2 = isoLine(n3, ip0, ip1, ip2, isovalue, i, p0, p1);
+   
+    // The minimum distance from the pixel to the line running through the triangle edge 
+    // points.   
+    d2 = min(d2, distEdge(p - p0, p - p1)); 
+    
+    // Make a copy.
+    float oldD2 = d2;
+    
+    if(iTh2 == 7) d2 = 0.; 
+    if(iTh == 7) d2 = 1e5;
+    d2 = max(d2, -d);
+     
+    // Contour lines - 2nd (beach) contour.
+    d3 = min(d3, distLine((p - p0), (p - p1)));
+    // Contour points - 2nd (beach) contour.
+    d4 = min(d4, min(length(p - p0), length(p - p1))); 
+                
+    d4 -= .075f;
+    d3 -= .0125f;
+     
+    ////////
+    if(triangle_countours) {
+      // Triangulating the contours.
+
+      // Flagging when the triangle contains a second contour line, or not.
+      float td2 = (iTh2>0 && iTh2<7)? 1 : 0;
+       
+      if(td==1 && td2==1){
+        // Both contour lines run through a triangle, so you need to do a little more
+        // subdividing. 
+        
+        // The beach colored quad between the first contour and second contour.
+        d5 = min(d5, distLine(p - p0, p - oldP0)); 
+        d5 = min(d5, distLine(p - p0, p - oldP1));  
+        d5 = min(d5, distLine(p - p1, p - oldP1));
+         
+        // The quad between the water and the beach.
+        if(oldD2>0.){
+            vec2 pt = p0;
+            if(i==1.) pt = p1;
+            d5 = min(d5, distLine(p - pt, p - ip0)); 
+            d5 = min(d5, distLine(p - pt, p - ip1));  
+            d5 = min(d5, distLine(p - pt, p - ip2)); 
+        }
+      } else if(td==1 && td2==0) {
+        // One contour line through the triangle.
+        
+        // Beach and grass quads.
+        vec2 pt = oldP0;
+        if(i==1) pt = oldP1;
+        d5 = min(d5, distLine(p - pt, p - ip0)); 
+        d5 = min(d5, distLine(p - pt, p - ip1));  
+        d5 = min(d5, distLine(p - pt, p - ip2)); 
+      } else if(td==0 && td2==1) { 
+        // One contour line through the triangle.
+        
+        // Beach and water quads.
+        vec2 pt = p0;
+        if(i==1.) pt = p1;
+        d5 = min(d5, distLine(p - pt, p - ip0)); 
+        d5 = min(d5, distLine(p - pt, p - ip1));  
+        d5 = min(d5, distLine(p - pt, p - ip2));  
+      }
+    }
+    
+    // The screen coordinates have been scaled up, so the distance values need to be
+    // scaled down.
+    d /= gSc;
+    d2 /= gSc;
+    d3 /= gSc;
+    d4 /= gSc;    
+    d5 /= gSc; 
+    
+    // Rendering - Coloring.
+        
+    // Initial color.
+    vec3 col = vec3(1, .85, .6);
+    
+    // Smoothing factor.
+    float sf = .004; 
+   
+    // Water.
+    if(d > 0 && d2 > 0) col = vec3(1, 1.8, 3) * .45f;
+
+     // Water edging.
+    if(d > 0) col = mix(col, vec3(1, 1.85, 3)*.3f, 
+      (1 - smoothstep(0.f, sf, d2 - .012f)));
+    
+    // Beach.
+    col = mix(col, vec3(1.1, .85, .6),  (1. - smoothstep(0.f, sf, d2)));
+    // Beach edging.
+    col = mix(col, vec3(1.5, .9, .6)*.6f, (1. - smoothstep(0.f, sf, d - .012f)));
+    
+    if(grass) {
+      // Grassy terrain.
+      col = mix(col, vec3(1, .8, .6)*vec3(.7, 1., .75)*.95f, (1 - smoothstep(0.f, sf, d))); 
+    } else {
+      // Alternate barren terrain.
+      col = mix(col, vec3(1, .82, .6)*.95f, (1 - smoothstep(0.f, sf, d))); 
+    }
+
+    // Abstract shading, based on the individual noise height values for each triangle.
+    if(d2>0) col *= (abs(dot(n3, vec3(1)))*1.25f+ 1.25f)/2;
+    else col *= max(2 - (dot(n3, vec3(1)) + 1.45f)/1.25f, 0.f);
+    
+    // More abstract shading.
+    // if(iTh!=0) col *= float(iTh)/7.*.5 + .6;
+    // else col *= float(3.)/7.*.5 + .75;
+
+    if(triangle_pattern) {
+      // A concentric triangular pattern.
+      float pat = abs(fract(tri * 12.5f + .4f) - .5f) * 2;
+      col *= pat * .425f + .75f; 
+    }
+
+    // Triangle grid overlay.
+    col = mix(col, vec3(0), (1 - smoothstep(0.f, sf, d5))*.95f);
+    
+    // Lines.
+    col = mix(col, vec3(0), (1 - smoothstep(0.f, sf, d3)));
+    
+    // Dots.
+    col = mix(col, vec3(0), (1 - smoothstep(0.f, sf, d4)));
+    col = mix(col, vec3(1), (1 - smoothstep(0.f, sf, d4 + .005f)));
+  
+    // Rough pencil color overlay... 
+    // Tweaked to suit the brush stroke size.
+    vec2 q = oP*1.5f;
+    // I always forget this bit. Without it, the grey scale value will be above one, 
+    // resulting in the extra bright spots not having any hatching over the top.
+    col = min(col, 1.);
+    // Underlying grey scale pixel value -- Tweaked for contrast and brightness.
+    float gr = sqrt(dot(col, vec3(.299, .587, .114)))*1.25f;
+    // Stretched fBm noise layer.
+    float ns = 
+      (n2D3G(q * 4 * vec2(1./3., 3), time) * .64f + 
+        n2D3G(q * 8 * vec2(1./3., 3), time) * .34f) * .5f + .5f;
+
+    // Compare it to the underlying grey scale value.
+    ns = gr - ns;
+    //
+    // Repeat the process with a rotated layer.
+    q = rot2(M_PIf32 / 3) * q;
+    float ns2 = 
+      (n2D3G(q * 4 * vec2(1./3., 3), time) * .64f + 
+      n2D3G(q * 8 * vec2(1./3., 3), time) * .34f) * .5f + .5f;
+    ns2 = gr - ns2;
+    //
+    // Mix the two layers in some way to suit your needs. Flockaroo applied common sense, 
+    // and used a smooth threshold, which works better than the dumb things I was trying. :)
+    ns = smoothstep(0.f, 1.f, min(ns, ns2)); // Rough pencil sketch layer.
+    //
+    // Mix in a small portion of the pencil sketch layer with the clean colored one.
+    col = mix(col, col*(ns + .35f), .4f);
+
+    return col;
+  }
+
+  vec4 render(vec2 frag_coord, shadertoy_uniforms_t u) {
+    // Screen coordinates. I've put a cap on the fullscreen resolution to stop
+    // the pattern looking too blurred out.
+    vec2 uv = (frag_coord - u.resolution * .5f) / scale;
+     
+    // Position with some scrolling, and screen rotation to level the pattern.
+    vec2 p = rot2(M_PIf32 / 12) * uv + vec2(sqrt(2.f) / 2, .5f)* u.time / 16; 
+    
+    // The simplex grid contour map... or whatever you wish to call it. :)
+    vec3 col = simplexContour(p, u.time);
+    
+    // Subtle vignette.
+    uv = frag_coord / u.resolution;
+    // col *= pow(16 * uv.x * uv.y * (1 - uv.x) * (1 - uv.y), .0625f) + .1f;
+    
+    // Colored variation.
+    col = mix(col.zyx / 2, col, 
+      pow(16 * uv.x * uv.y * (1 - uv.x) * (1 - uv.y) , .125f));
+ 
+    // Rough gamma correction.
+    vec4 fragColor(sqrt(max(col, 0)), 1);
+    return fragColor;
+  }
+
+  [[.imgui::range_float { 200, 2000 }]] float scale = 650;
+  int triangle_countours = false;
+  int triangle_pattern = true;
+  int grass = true;
+  interpolation_t interpolation = quintic;
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
 
 struct palette_t {
   
@@ -2273,7 +2668,7 @@ struct [[
     devil_egg_t,
 
     hypno_bands_t,
-    paint_t,
+    triangle_grid_t,
     modulation_t,
 
     keep_up_square_t,
@@ -2320,5 +2715,6 @@ template void frag_shader<band_limited2_t>() asm("band2");
 template void frag_shader<tracer_engine_t<"sphere tracer", sphere_tracer_t, blobs_t>>() asm("sphere");
 template void frag_shader<tracer_engine_t<"segment tracer", segment_tracer_t, blobs_t>>() asm("segment");
 template void frag_shader<tracer_engine_t<"comparison", std::pair<sphere_tracer_t, segment_tracer_t>, blobs_t>>() asm("comparison");
+template void frag_shader<triangle_grid_t>() asm("triangle_grid");
 template void frag_shader<raymarch_prims_t>() asm("raymarch");
 template void frag_shader<thumbnails_t>() asm("thumbnails");

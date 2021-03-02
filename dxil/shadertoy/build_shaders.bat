@@ -9,6 +9,7 @@ wsl circle -shader -emit-dxil -c shaders.cxx -E square -o square.dxil && dxil-si
 wsl circle -shader -emit-dxil -c shaders.cxx -E modulation -o modulation.dxil && dxil-signing modulation.dxil
 wsl circle -shader -emit-dxil -c shaders.cxx -E bands -o bands.dxil && dxil-signing bands.dxil
 wsl circle -shader -emit-dxil -c shaders.cxx -E paint -o paint.dxil && dxil-signing paint.dxil
+wsl circle -shader -emit-dxil -c shaders.cxx -E triangle_grid -o triangle_grid.dxil && dxil-signing triangle_grid.dxil
 wsl circle -shader -emit-dxil -c shaders.cxx -E menger -o menger.dxil && dxil-signing menger.dxil
 wsl circle -shader -emit-dxil -c shaders.cxx -E hypercomplex -o hypercomplex.dxil && dxil-signing hypercomplex.dxil
 wsl circle -shader -emit-dxil -c shaders.cxx -E band1 -o band1.dxil && dxil-signing band1.dxil

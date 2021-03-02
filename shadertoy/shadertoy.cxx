@@ -1871,8 +1871,8 @@ struct [[
 
     if(triangle_pattern) {
       // A concentric triangular pattern.
-      float pat = abs(fract(tri*12.5 + .4) - .5)*2.;
-      col *= pat*.425 + .75; 
+      float pat = abs(fract(tri * 12.5f + .4f) - .5f) * 2;
+      col *= pat * .425f + .75f; 
     }
 
     // Triangle grid overlay.
@@ -1948,6 +1948,7 @@ struct [[
   bool grass = true;
   interpolation_t interpolation = quintic;
 };
+
 
 ////////////////////////////////////////////////////////////////////////////////
 

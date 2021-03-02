@@ -35,6 +35,7 @@ const char* vert_shader_file = "vert.dxil";
 
 const char* frag_shader_files[] {
   "fractal.dxil",
+  "triangle_grid.dxil",
   "clouds.dxil",
   "devil.dxil",
   "square.dxil",
