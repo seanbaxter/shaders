@@ -81,10 +81,10 @@ enum class sprite_name_t {
 ////////////////////////////////////////////////////////////////////////////////
 
 // Treat the rgba8ui image as an r32ui image for more efficient imageStore.
-[[using spirv: uniform, binding(0), format(r32ui)]]
+[[using spirv: uniform(0), format(r32ui)]]
 uimage2D output_image;
 
-[[using spirv: buffer, binding(0)]]
+[[spirv::buffer(0)]]
 ivec2 sprite_locations[];
 
 [[using spirv: uniform, location(0)]]

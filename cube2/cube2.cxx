@@ -19,13 +19,10 @@ struct uniforms_t {
   float seconds;
 };
 
-[[using spirv: uniform, binding(0)]]
-uniforms_t uniforms;
-
 [[spirv::vert]]
 void vert_main() {
   // Create a rotation matrix.
-  mat4 rotate = make_rotateY(uniforms.seconds);
+  mat4 rotate = make_rotateY(shader_ubo<0, uniforms_t>.seconds);
 
   // Rotate the position.
   vec4 position = rotate * vec4(shader_in<vattrib_position>, 1);

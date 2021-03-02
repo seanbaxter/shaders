@@ -218,7 +218,7 @@ struct frag_features_t {
 [[spirv::constant(0)]]
 frag_features_t frag_features;
 
-[[using spirv: uniform, binding(0)]]
+[[spirv::uniform(0)]]
 uniform_t uniforms;
 
 

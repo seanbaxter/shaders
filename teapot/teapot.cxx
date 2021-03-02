@@ -91,7 +91,7 @@ void tesc_shader() {
 mat4 mat_view;
 
 // OpenGL requires output and spacing on the evaluation stage.
-[[using spirv: tese(quads), output(triangle_ccw), spacing(fractional_even)]]
+[[using spirv: tese(quads, 16), output(triangle_ccw), spacing(fractional_even)]]
 void tese_shader() {
   float u = gltese_TessCoord.x;
   float v = gltese_TessCoord.y;

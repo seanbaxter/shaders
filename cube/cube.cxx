@@ -3,22 +3,22 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "texture.hxx"
 
-[[using spirv: in, location(0)]]
+[[spirv::in(0)]]
 vec3 in_position_vs;
 
-[[using spirv: in, location(1)]]
+[[spirv::in(1)]]
 vec2 in_texcoord_vs;
 
-[[using spirv: out, location(1)]]
+[[spirv::out(1)]]
 vec2 out_texcoord_vs;
 
-[[using spirv: in, location(1)]]
+[[spirv::in(1)]]
 vec2 in_texcoord_fs;
 
-[[using spirv: out, location(0)]]
+[[spirv::out(0)]]
 vec4 out_color_fs;
 
-[[using spirv: uniform, binding(0)]]
+[[spirv::uniform(0)]]
 sampler2D texture_sampler;
 
 struct uniforms_t {
@@ -26,7 +26,7 @@ struct uniforms_t {
   float seconds;
 };
 
-[[using spirv: uniform, binding(0)]]
+[[spirv::uniform(0)]]
 uniforms_t uniforms;
 
 [[spirv::vert]]
