@@ -104,6 +104,15 @@
 
     * [The meshlet cadscene sample](#the-meshlet-cadscene-sample)
 
+1. [DXIL D3D12 compilation](#dxil-d3d12-compilation)
+
+    [![nbody](images/dxil_nbody_small.png)](#dxil-d3d12-compilation)
+    [![shadertoy](images/dxil_shadertoy_small.png)](#dxil-d3d12-compilation)
+    [![tessellation](images/dxil_tessellation_small.png)](#dxil-d3d12-compilation)
+    [![wave](images/dxil_wave_small.png)](#dxil-d3d12-compilation)
+
+    * [D3D12 samples](#d3d12-samples)
+
 1. [Vectors and matrices](#vectors-and-matrices)
 
     * [Vector swizzle](#vector-swizzle)
@@ -3852,6 +3861,132 @@ vec4 procVertex(uint vert, uint vidx, uint meshletID) {
 
 `procVertex` is responsible for streaming geometry from the mesh shader to GPU's triangle setup engine. The `shader_out` variable template is specialized on a `Vertex` array, which is sized to the max number of vertices per block for this sample (126 primitives). These four terms are interpolated by the GPU and recovered by the fragment shader as `in` parameters and rasterized.
 
+## DXIL D3D12 compilation
+
+D3D12 uses an intermediate representation called DXIL, which is based on LLVM-3.7. Circle now targets this IR, compiling shaders marked with attributes from the `spirv` attribute namespace. 
+
+SPIR-V supports multiple shader entry points in one binary module, so the `@spirv` extension yields the mangled name of the shader entry point into that module. DXIL only supports one entry point per module, so `@dxil` yields a `D3D12_SHADER_BYTECODE` structure, which contains a pointer to the start of the entry point's module and its length. This value is assigned directly into the [D3D12_GRAPHICS_PIPELINE_STATE_DESC](https://docs.microsoft.com/en-us/windows/win32/api/d3d12/ns-d3d12-d3d12_graphics_pipeline_state_desc) or [D3D12_COMPUTE_PIPELINE_STATE_DESC](https://docs.microsoft.com/en-us/windows/win32/api/d3d12/ns-d3d12-d3d12_compute_pipeline_state_desc).
+
+Unfortunately, Circle doesn't yet support single-source compilation of Windows targets, so offline compline needs be used for now. Either `extern "C"` your non-template entry points or use an [_asm-label_](#examples) to fix the name of the shader. Then select the shader to compile with the `-E <entry-point>` command-line option.
+
+**[build_shaders.bat](dxil/shadertoy/build_shaders.bat)**
+```
+:: one vertex shader
+wsl circle -shader -emit-dxil -c shaders.cxx -E vert -o vert.dxil & dxil-signing vert.dxil
+
+:: fragment shaders
+wsl circle -shader -emit-dxil -c shaders.cxx -E fractal -o fractal.dxil && dxil-signing fractal.dxil
+wsl circle -shader -emit-dxil -c shaders.cxx -E clouds -o clouds.dxil && dxil-signing clouds.dxil
+wsl circle -shader -emit-dxil -c shaders.cxx -E devil -o devil.dxil && dxil-signing devil.dxil
+wsl circle -shader -emit-dxil -c shaders.cxx -E square -o square.dxil && dxil-signing square.dxil
+wsl circle -shader -emit-dxil -c shaders.cxx -E modulation -o modulation.dxil && dxil-signing modulation.dxil
+wsl circle -shader -emit-dxil -c shaders.cxx -E bands -o bands.dxil && dxil-signing bands.dxil
+wsl circle -shader -emit-dxil -c shaders.cxx -E paint -o paint.dxil && dxil-signing paint.dxil
+wsl circle -shader -emit-dxil -c shaders.cxx -E triangle_grid -o triangle_grid.dxil && dxil-signing triangle_grid.dxil
+wsl circle -shader -emit-dxil -c shaders.cxx -E menger -o menger.dxil && dxil-signing menger.dxil
+wsl circle -shader -emit-dxil -c shaders.cxx -E hypercomplex -o hypercomplex.dxil && dxil-signing hypercomplex.dxil
+wsl circle -shader -emit-dxil -c shaders.cxx -E band1 -o band1.dxil && dxil-signing band1.dxil
+wsl circle -shader -emit-dxil -c shaders.cxx -E band2 -o band2.dxil && dxil-signing band2.dxil
+wsl circle -shader -emit-dxil -c shaders.cxx -E sphere -o sphere.dxil && dxil-signing sphere.dxil
+wsl circle -shader -emit-dxil -c shaders.cxx -E segment -o segment.dxil && dxil-signing segment.dxil
+wsl circle -shader -emit-dxil -c shaders.cxx -E comparison -o comparison.dxil && dxil-signing comparison.dxil
+wsl circle -shader -emit-dxil -c shaders.cxx -E raymarch -o raymarch.dxil && dxil-signing raymarch.dxil
+wsl circle -shader -emit-dxil -c shaders.cxx -E thumbnails -o thumbnails.dxil && dxil-signing thumbnails.dxil
+```
+
+It's easiest to compile shaders with a batch file like this. Remember to sign the shader binary with the included dxil-signing tool.
+
+DXIL compilation is supported for these shader stages:
+
+* `vert`
+* `geom`
+* `tesc` (hull)
+* `tese` (domain)
+* `frag` (pixel)
+* `comp`
+
+Support for mesh and ray-tracing stages is forthcoming.
+
+### D3D12 samples
+
+The shaders example project includes [four samples](dxil) for D3D12. 
+
+#### [nbody](dxil/nbody)
+
+[![nbody](images/dxil_nbody_small.png)](images/dxil_nbody.png)
+
+This is a port of the [Direct3D 12 n-body gravity sample](https://github.com/microsoft/DirectX-Graphics-Samples/tree/master/Samples/Desktop/D3D12nBodyGravity) from the [DirectX-Graphics-Samples](https://github.com/microsoft/DirectX-Graphics-Samples) project. It uses almost the same compute shader as the [OpenGL nbody sample](#the-compute-stage). 
+
+Read the source [here](dxil/nbody/shaders.cxx).
+
+#### [shadertoy](dxil/shadertoy)
+
+[![shadertoy](images/dxil_shadertoy_small.png)](images/dxil_shadertoy.png)
+
+This is a recompilation of all the [OpenGL shadertoy](#reflection-and-attributes-for-shadertoy-development) shaders for DXIL. Because Circle doesn't yet have single-source C++ compilation for D3D12/Windows, we can't use reflection to automatically generate an ImGui to control shader parameters. Due to this, the shadertoy class objects are instantiated inside the fragment shader, rather than binding to a uniform buffer object. The default initializers for each class member is executed when the object is created each pixel, and the `render` function is invoked on that object.
+
+**[shaders.cxx](dxil/shadertoy/shaders.cxx)**
+```cpp
+template<typename shader_t>
+[[spirv::frag]] void frag_shader() {
+  shader_t shader { };
+
+  // D3D gives us coordinates of top-left, but we'd rather have bottom-left
+  // coordinates.
+  vec2 uv = glfrag_FragCoord.xy;
+  uv.y = uniforms.resolution.y - uv.y;
+  shader_out<0, vec4> = shader.render(uv, uniforms);
+}
+```
+
+#### [tessellation](dxil/tessellation)
+
+[![tessellation](images/dxil_tessellation_small.png)](images/dxil_tessellation.png)
+
+This is a port of the D3D12 book project [BasicTessellation](
+https://github.com/d3dcoder/d3d12book/tree/master/Chapter%2014%20The%20Tessellation%20Stages/BasicTessellation). It's simpler than the [teapot example](#the-tessellation-stages), because it only tessellates a single patch, not an entire model. However, the mechanics of DXIL tessellation are clear. 
+
+**[shaders.cxx](dxil/tessellation/shaders.cxx)**
+```cpp
+inline void patch_constant() {
+  vec3 p0 = gltesc_Input[0].Position.xyz;
+  vec3 p1 = gltesc_Input[1].Position.xyz;
+  vec3 p2 = gltesc_Input[2].Position.xyz;
+  vec3 p3 = gltesc_Input[3].Position.xyz;
+
+  vec3 centerL = .25f * (p0 + p1 + p2 + p3);
+  vec3 centerW = (object_data.gWorld * vec4(centerL, 1)).xyz;
+
+  float d = distance(centerW, pass_data.eyePos);
+  float d0 = 20;
+  float d1 = 100;
+  float tess = 64 * saturate((d1 - d) / (d1 - d0));
+
+  // Uniformly tessellate the patch.
+  gltesc_LevelOuter[0] = tess;
+  gltesc_LevelOuter[1] = tess;
+  gltesc_LevelOuter[2] = tess;
+  gltesc_LevelOuter[3] = tess;
+  gltesc_LevelInner[0] = tess;
+  gltesc_LevelInner[1] = tess;
+}
+
+extern "C"
+[[using spirv: tesc(quads, 4), output(triangle_cw), spacing(fractional_even)]]
+[[dxil::patch_constant(patch_constant)]]
+void tesc() {
+  // Pass the patch positions through.
+  gltesc_Output.Position = gltesc_Input[gltesc_InvocationID].Position;
+}
+```
+
+Use a `dxil::patch_constant` attribute to associate the patch function with the tessellation control/hull shader. This mechanism works with SPIR-V targets too, so it's good practice to always use it.
+
+#### [wave intrinsics](dxil/WaveIntrinsics)
+
+[![wave intrinsics](images/dxil_wave_small.png)](images/dxil_wave.png)
+
+This is a port of the [Direct3D 12 shader model 6 wave intrinsics sample](https://github.com/microsoft/DirectX-Graphics-Samples/tree/master/Samples/Desktop/D3D12SM6WaveIntrinsics). HLSL's Wave intrinsics map exactly to GLSL's Subgroup intrinsics. This project continues using the GLSL intrinsic names, mapping them to the correct DXIL intrinsics.
 
 ## Vectors and matrices
 
@@ -4126,20 +4261,15 @@ There are many features in development:
     2. `[[spirv::layout(std430)]]`
     3. `[[spirv::layout(scalar)]]`
 
-* More shader extensions:
-    1. `OVR_multiview` for faster stereo head-mounted display rendering.
+* More shader extensions. Requests?
 
-* Separated samplers/textures. (Vulkan only.)
 * Subpass inputs. (Vulkan only.)
-
-* A `#pragma spirv` namespace for issuing module-wide SPIR-V and DXIL directives.
 
 * A pipeline-like markup for naming shaders which may appear in the same shader program. This will enable automatic assignment of resources bindings.
 
 Some larger features I want to get to ASAP:
 
-* A Circle compiler for Windows. I need Microsoft's cooperation in accessing the Visual C++ ABI docs for this to happen.
-* A Circle extension for the PlayStation Shading Language (PSSL) binary format, to support PS4 and PS5.
+* A Circle compiler for Windows. This enables single-source D3D12 compilation. I need Microsoft's cooperation in accessing the Visual C++ ABI docs for this to happen.
 
 A single set of shader attributes can be rich enough for all three shader backend targets, so that the `spirv` attribute namespace can be replaced with the more generic `shader` namespace.
 

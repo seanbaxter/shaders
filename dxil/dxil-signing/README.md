@@ -1,10 +1,7 @@
 # DXIL Signing Utility
 
-### Usage
-`dxil-val.exe --input <input.dxil> --output <output.dxil>`
+Based on work from Graham Wihlidal's post:
+https://www.wihlidal.com/blog/pipeline/2018-09-16-dxil-signing-post-compile/
 
-### Before
-![Before Signing](images/unsigned.png)
-
-### After
-![After Signing](images/signed.png)
+And this github repo:
+https://github.com/gwihlidal/dxil-signing
