@@ -84,6 +84,7 @@
     * [Chevron launches](#chevron-launches)
     * [Physical storage buffers](#physical-storage-buffers)
     * [Lambda dispatch](#lambda-dispatch)
+    * [Shared memory unions](#shared-memory-unions)
     * [Moderngpu for Vulkan](#moderngpu-for-Vulkan)
 
 1. [Ray Tracing with Vulkan RTX](#ray-tracing-with-vulkan-rtx)
@@ -3314,6 +3315,27 @@ The `transform` function adds even more convenience. It executes the provided fu
 ```
 
 `transform` concisely executes a function in parallel N number of times. The lambda closure captures all variables named in the shader. This is a kind of convenience unprecedented in graphics API programming.
+
+### Shared memory unions
+
+The newest Vulkan extension is [VK_KHR_workgroup_memory_explicit_layout](https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VK_KHR_workgroup_memory_explicit_layout.html). This allows all shared memory variables to alias to the same physical layout, and with some creative frontend work, enable any number of C++ _union_ types in shared memory. This is a critical tool for improving execution occupancy by reducing shared memory consumption, a common bottleneck of compute shaders.
+
+However, this capability is cutting-edge and not available on most drivers, or on OpenGL clients currently. To opt in, enable the GLSL capability GL_EXT_shared_memory_block:
+
+* `#pragma spirv GL_EXT_shared_memory_block` or
+* `_Pragma("spirv GL_EXT_shared_memory_block")`
+
+To use shared memory aliasing, try a declaration like this:
+
+[**radix.hxx**](https://github.com/seanbaxter/mgpu-shaders/blob/master/inc/mgpu/vk/radix.hxx)
+```cpp
+      __shared__ union {
+        typename radix_t::storage_t radix;
+        unsigned_type keys[nv];
+      } shared;
+```
+
+Class objects that perform an operation can declare their shared memory requirements with a `storage_t` typedef, which recursively union the `storage_t` types of class objects that it depends on. The kernel-level code makes the actual `__shared__ union` declaration, as shown.
 
 ### Moderngpu for Vulkan
 
