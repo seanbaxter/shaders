@@ -113,6 +113,7 @@
     [![wave](images/dxil_wave_small.png)](#dxil-d3d12-compilation)
 
     * [D3D12 samples](#d3d12-samples)
+    * [HLSL semantics](#hlsl-semantics)
 
 1. [Vectors and matrices](#vectors-and-matrices)
 
@@ -4009,6 +4010,75 @@ Use a `dxil::patch_constant` attribute to associate the patch function with the 
 [![wave intrinsics](images/dxil_wave_small.png)](images/dxil_wave.png)
 
 This is a port of the [Direct3D 12 shader model 6 wave intrinsics sample](https://github.com/microsoft/DirectX-Graphics-Samples/tree/master/Samples/Desktop/D3D12SM6WaveIntrinsics). HLSL's Wave intrinsics map exactly to GLSL's Subgroup intrinsics. This project continues using the GLSL intrinsic names, mapping them to the correct DXIL intrinsics.
+
+### HLSL semantics
+
+GLSL uses location indices to identify interface variables. HLSL uses semantics, which combine string names and indices, to identify them. Semantics are referenced in host code to coordinate input assembly with vertex shader inputs.
+
+Circle C++ Shaders implements a `dxil::semantic` attribute to provide HLSL functionality in a C++ frontend.
+
+`dxil::semantic` takes one or two operands. The one-operand version takes a combined name/index string, e.g. "COLOR3" or "COLOR". If no index is provided, 0 is assumed. The two-operand version takes separated name and index arguments: `("COLOR", 3)`. The advantage of this mechanism is that you can source the index to an integer constant or template parameter without involving string concatenation.
+
+**[semantic.cxx](dxil/semantic.cxx)**
+```cpp
+// Semantic index 0 is implicit.
+[[spirv::in, dxil::semantic("POSITION")]]
+vec4 pos0;
+
+extern "C" [[spirv::vert]]
+void f0() {
+  glvert_Output.Position = pos0;
+}
+
+// Semantic index 1 is explicit.
+[[spirv::in, dxil::semantic("POSITION1")]]
+vec4 pos1;
+
+extern "C" [[spirv::vert]]
+void f1() {
+  glvert_Output.Position = pos1;
+}
+
+// Semantic index is a template parameter.
+template<typename type_t, int index>
+[[spirv::in, dxil::semantic("POSITION", index)]]
+type_t input_index;
+
+extern "C" [[spirv::vert]]
+void f2() {
+  glvert_Output.Position = input_index<vec4, 2>;
+}
+
+// Both semantic name and index are template parameters.
+template<typename type_t, const char name[], int index>
+[[spirv::in, dxil::semantic(name, index)]]
+type_t input_name_index;
+
+extern "C" [[spirv::vert]]
+void f3() {
+  glvert_Output.Position = input_name_index<vec4, "POSITION", 3>;
+}
+```
+
+Interface variables are most conveniently accessed through [variable templates](#variable-templates). Circle even supports string template parameters: use the syntax `const char string_name[]`. By specializing the template parameter over the semantic name and index, you can drive interface variable access through compile-time control flow.
+
+```
+$ circle -shader -emit-dxil -S -console semantic.cxx -E f3
+!0 = !{i32 1, i32 5}
+!1 = !{!"vs", i32 6, i32 5}
+!2 = !{[6 x i32] [i32 4, i32 4, i32 1, i32 2, i32 4, i32 8]}
+!3 = !{void ()* @f3, !"f3", !4, null, null}
+!4 = !{!5, !9, null}
+!5 = !{!6}
+!6 = !{i32 0, !"POSITION", i8 9, i8 0, !7, i8 0, i32 1, i8 4, i32 0, i8 0, !8}
+!7 = !{i32 3}
+!8 = !{i32 3, i32 15}
+!9 = !{!10}
+!10 = !{i32 0, !"SV_Position", i8 9, i8 3, !11, i8 4, i32 1, i8 4, i32 0, i8 0, !8}
+!11 = !{i32 0}
+```
+
+The specialization of `input_name_index` is visible in this DXIL disassembly. The metadata variable !7 is sourced by the input signature element !6. Its value is `i32 3`, which is the semantic index for the variable, and our variable template argument.
 
 ## Vectors and matrices
 
