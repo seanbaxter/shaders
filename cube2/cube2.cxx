@@ -18,6 +18,8 @@ struct uniforms_t {
   mat4 view_proj;
   float seconds;
 };
+[[spirv::uniform(0)]]
+uniforms_t uniforms;
 
 [[spirv::vert]]
 void vert_main() {
