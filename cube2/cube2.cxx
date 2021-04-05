@@ -18,8 +18,6 @@ struct uniforms_t {
   mat4 view_proj;
   float seconds;
 };
-[[spirv::uniform(0)]]
-uniforms_t uniforms;
 
 [[spirv::vert]]
 void vert_main() {
@@ -30,7 +28,7 @@ void vert_main() {
   vec4 position = rotate * vec4(shader_in<vattrib_position>, 1);
 
   // Write to a builtin variable.
-  glvert_Output.Position = uniforms.view_proj * position;
+  glvert_Output.Position = shader_ubo<0, uniforms_t>.view_proj * position;
 
   // Pass texcoord through.
   shader_out<vattrib_texcoord> = shader_in<vattrib_texcoord>;
