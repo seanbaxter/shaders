@@ -468,7 +468,7 @@ There are some mutually-exclusive auxiliary modifiers:
 * `[[spirv::patch]]`, `[[spirv::centroid]]` and `[[spirv::sample]]` - Use at most one of these.
 
 * `dxil::semantic(name)` - Identifies a semantic name to an `in` or `out` interface variable. A `spirv::location` attribute cannot be declared for the same variable. Special variables starting with "SV_" are not supported with this attribute.
-* * `dxil::semantic(name, index)` - The two-operand version is easier to specialize. The string name identifies the element without an index. The index operand may be any constant expression, including one dependent on a template parameter. During instantiation, the integer index is evaluated, turned into a string, and concatenated with the preceding name.
+* `dxil::semantic(name, index)` - The two-operand version is easier to specialize. The string name identifies the element without an index. The index operand may be any constant expression, including one dependent on a template parameter. During instantiation, the integer index is evaluated, turned into a string, and concatenated with the preceding name.
 
 ## Shaders as an embedded language
 
