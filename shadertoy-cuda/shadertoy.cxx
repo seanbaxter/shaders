@@ -1386,7 +1386,7 @@ struct [[
 
     trace_result_t result { };
 
-    constexpr bool is_dual = @is_class_template(tracer_t, tracer_pair_t);
+    constexpr bool is_dual = tracer_t.template == tracer_pair_t;
     if constexpr(is_dual)
       result = (pixel.x < mouse.x) ?
         tracer.left.trace(scene, ro, rd, 20, 60, MaxSteps) :
