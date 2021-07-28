@@ -1893,7 +1893,7 @@ struct [[
 
     trace_result_t result { };
 
-    constexpr bool is_dual = @is_class_template(tracer_t, std::pair);
+    constexpr bool is_dual = tracer_t.template == std::pair;
     if constexpr(is_dual)
       result = (pixel.x < mouse.x) ?
         tracer.first.trace(scene, ro, rd, 20, 60, MaxSteps) :
