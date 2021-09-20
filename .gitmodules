@@ -14,3 +14,9 @@
 [submodule "mgpu-shaders"]
 	path = mgpu-shaders
 	url = git@github.com:seanbaxter/mgpu-shaders
+[submodule "thirdparty/thrust"]
+	path = thirdparty/thrust
+	url = git@github.com:allisonvacanti/thrust
+[submodule "thirdparty/cub"]
+	path = thirdparty/cub
+	url = git@github.com:allisonvacanti/cub
