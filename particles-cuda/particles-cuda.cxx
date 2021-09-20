@@ -1,5 +1,5 @@
-#if __circle_build__ < 128
-#error "Requires Circle build 128"
+#if __circle_build__ < 132
+#error "Requires Circle build 132"
 #endif
 
 #include <mgpu/gl/mergesort.hxx>
@@ -575,11 +575,7 @@ void system_t::collide() {
         }
       }
     }
-
-    // TODO: Collide with the cursor sphere.
-    // f += collide_spheres(pos, params.colliderPos, vel, vec3(), r, 
-    //   params.colliderRadius, params);
-
+    
     // Integrate the velocity by the new acceleration and write out.
     vel += f; 
     vel_out[index] = vec4(vel, 0);
