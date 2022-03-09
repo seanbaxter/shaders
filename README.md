@@ -376,8 +376,8 @@ enum class gltess_spacing_t : unsigned {
 
 Circle supports DXIL constructs with a few new attributes:
 
-* `dxil::patch_constant(f)` - Tessellation control shaders/hull shaders may set the `gltesc_LevelInner` and `gltesc_LevelOuter` variables from a special patch constant function, which is invoked once per patch. This is mandatory for DXIL shaders and optional for SPIR-V shaders.
-* `dxil::max_tess_factor(factor)` - Hull shaders may specify a max tessellation factor, up to 64. DXIL only.
+* `[[dxil::patch_constant(f)]]` - Tessellation control shaders/hull shaders may set the `gltesc_LevelInner` and `gltesc_LevelOuter` variables from a special patch constant function, which is invoked once per patch. This is mandatory for DXIL shaders and optional for SPIR-V shaders.
+* `[[dxil::max_tess_factor(factor)]]` - Hull shaders may specify a max tessellation factor, up to 64. DXIL only.
 
 ### Interface attributes
 
@@ -467,8 +467,8 @@ There are some mutually-exclusive auxiliary modifiers:
 * `[[spirv::noperspective]] and [[spirv::flat]]` - Control interpolation of shader stage attributes. Use at most one of these.
 * `[[spirv::patch]]`, `[[spirv::centroid]]` and `[[spirv::sample]]` - Use at most one of these.
 
-* `dxil::semantic(name)` - Identifies a semantic name to an `in` or `out` interface variable. A `spirv::location` attribute cannot be declared for the same variable. Special variables starting with "SV_" are not supported with this attribute.
-* `dxil::semantic(name, index)` - The two-operand version is easier to specialize. The string name identifies the element without an index. The index operand may be any constant expression, including one dependent on a template parameter. During instantiation, the integer index is evaluated, turned into a string, and concatenated with the preceding name.
+* `[[dxil::semantic(name)]]` - Identifies a semantic name to an `in` or `out` interface variable. A `spirv::location` attribute cannot be declared for the same variable. Special variables starting with "SV_" are not supported with this attribute.
+* `[[dxil::semantic(name, index)]]` - The two-operand version is easier to specialize. The string name identifies the element without an index. The index operand may be any constant expression, including one dependent on a template parameter. During instantiation, the integer index is evaluated, turned into a string, and concatenated with the preceding name.
 
 ## Shaders as an embedded language
 
